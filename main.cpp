@@ -53,7 +53,7 @@ int main()
 
     // First try
     unsigned char tape[30000] = {0};
-    // here need to think should I have wrap arounds or such 
+    // here need to think should I have wrap arounds or such
     unordered_map<int, int> positions;
     unordered_map<int, int> revpos;
 
@@ -91,7 +91,7 @@ int main()
             tape[tpptr]++;
             strptr++;
 
-            cout << "Dump State : Tape ptr : " << tpptr  << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
             break;
 
         case '-':
@@ -99,12 +99,16 @@ int main()
             // Decrement the value at the current cell by one.
             tape[tpptr]--;
             strptr++;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+
             break;
 
         case '>':
             encWrt(rdTxt[strptr]);
             // Move the tape index to the right.
             tpptr++;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+
             break;
 
         case '<':
@@ -112,6 +116,8 @@ int main()
             // Move the tape index to the left.
             tpptr--;
             strptr++;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+
             break;
 
         case '.':
@@ -119,6 +125,8 @@ int main()
             // Print the current value of the cell.
             cout << " Content in the Cell : " << tape[tpptr];
             strptr++;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+
             break;
 
         case ',':
@@ -126,6 +134,8 @@ int main()
             // Reads input.
             // Skipped for phase 1.
             strptr++;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
+
             break;
 
         case '[':
@@ -147,14 +157,17 @@ int main()
                 // The map is keyed by positions in the code string,
                 // so the lookup should use strptr.
                 strptr = positions[tpptr]++;
+                cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
             }
             else
             {
                 // Cell is non-zero: just step into the loop body.
                 strptr++;
+                cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
             }
 
             encWrt(rdTxt[strptr]);
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
 
             break;
 
@@ -165,18 +178,21 @@ int main()
                 // Cell is non-zero: jump back to the start of the loop.
                 // This uses the reverse lookup.
                 strptr = revpos[strptr]++;
+                cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
             }
             else
             {
                 strptr++;
+                cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
             }
 
             break;
 
         default:
-            // if space or new line , we will skip it 
+            // if space or new line , we will skip it
             strptr++;
             cout << " Not a valid Brain Fuck instruction " << endl;
+            cout << "Dump State : Tape ptr : " << tpptr << " String ptr : " << strptr << "Tape content : " << tape[tpptr] << "String Content : " << rdTxt[strptr] << endl;
         }
     }
 
