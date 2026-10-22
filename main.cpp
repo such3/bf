@@ -133,78 +133,78 @@ int main()
         case '+':
             encWrt(rdTxt[strptr]);
             // Increment the value at the current cell by one.
-            tape[tpptr]++;
-            strptr++;
-
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
+            tape[tpptr]++;
+            strptr++;
+
             break;
 
         case '-':
             encWrt(rdTxt[strptr]);
-            // Decrement the value at the current cell by one.
-            tape[tpptr]--;
-            strptr++;
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
+            // Decrement the value at the current cell by one.
+            tape[tpptr]--;
+            strptr++;
 
             break;
 
         case '>':
             encWrt(rdTxt[strptr]);
             // Move the tape index to the right.
+            cout << "Dump State : Tape ptr : " << tpptr
+                 << " String ptr : " << strptr
+                 << " Tape content : " << (char)tape[tpptr]                    // Cast to number
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << endl;
             tpptr++;
             // error , i forgot to increment the str , so it kept on printing the same character
             strptr++;
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
-                 << endl;
             break;
 
         case '<':
             encWrt(rdTxt[strptr]);
-            // Move the tape index to the left.
-            tpptr--;
-            strptr++;
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
+            // Move the tape index to the left.
+            tpptr--;
+            strptr++;
 
             break;
 
         case '.':
             encWrt(rdTxt[strptr]);
-            // Print the current value of the cell.
-            cout << " Content in the Cell : " << tape[tpptr];
-            strptr++;
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
+            // Print the current value of the cell.
+            cout << " Content in the Cell : " << tape[tpptr];
+            strptr++;
 
             break;
 
         case ',':
             encWrt(rdTxt[strptr]);
-            // Reads input.
-            // Skipped for phase 1.
-            strptr++;
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
+            // Reads input.
+            // Skipped for phase 1.
+            strptr++;
 
             break;
 
@@ -220,36 +220,35 @@ int main()
             If it is 0, I need to move the pointer past the matching ']'.
             Can we do this by looking the position up in the map?
             */
+            encWrt(rdTxt[strptr]);
+
 
             if (tape[tpptr] == 0)
             {
+                cout << "Dump State : Tape ptr : " << tpptr
+                     << " String ptr : " << strptr
+                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << endl;
                 // Cell is zero: look up the matching bracket.
                 // The map is keyed by positions in the code string,
                 // so the lookup should use strptr.
                 strptr = positions[tpptr]++;
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
-                     << endl;
+                
             }
             else
             {
-                // Cell is non-zero: just step into the loop body.
-                strptr++;
-                cout << "Dump State : Tape ptr : " << tpptr
+                  cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
                      << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                      << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                      << endl;
+                // Cell is non-zero: just step into the loop body.
+                strptr++;
+              
+                    
             }
 
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
-                 << endl;
 
             break;
 
@@ -257,36 +256,36 @@ int main()
             encWrt(rdTxt[strptr]);
             if (tape[tpptr] != 0)
             {
+                cout << "Dump State : Tape ptr : " << tpptr
+                     << " String ptr : " << strptr
+                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << endl;
                 // Cell is non-zero: jump back to the start of the loop.
                 // This uses the reverse lookup.
                 strptr = revpos[strptr]++;
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
-                     << endl;
             }
             else
             {
-                strptr++;
                 cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
                      << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                      << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                      << endl;
+                strptr++;
             }
 
             break;
 
         default:
+        cout << "Dump State : Tape ptr : " << tpptr
+             << " String ptr : " << strptr
+             << " Tape content : " << (int)tape[tpptr]                    // Cast to number
+             << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+             << endl;
             // if space or new line , we will skip it
             strptr++;
             cout << " Not a valid Brain Fuck instruction " << endl;
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
-                 << endl;
         }
         cout << "------------------------------------------------" << endl;
     }
