@@ -204,7 +204,7 @@ int main()
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
             // Print the current value of the cell.
-            cout << " Content in the Cell : " << tape[tpptr];
+            cout << " Content in the Cell : " << tape[tpptr] << endl;
             strptr++;
 
             break;
@@ -297,9 +297,9 @@ int main()
                  << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
-            // Spaces, newlines and other characters are skipped.
+            // Spaces, newlines, tabs and other characters are skipped.
             strptr++;
-            cout << " Not a valid Brain Fuck instruction " << endl;
+            cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
         }
         cout << "------------------------------------------------" << endl;
     }
