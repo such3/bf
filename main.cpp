@@ -100,6 +100,7 @@ int main()
     string rdTxt;
 
     // Read the BF code from input.txt.
+    // need improvements and safety measure  to be taken in file handling , so that we dont fail when we hit EOF or smth and also how to handle the file when we have multiple lines of code ?
     ifstream file("input.txt");
     while (getline(file, rdTxt))
     {
@@ -245,7 +246,9 @@ int main()
                 // Cell is zero: look up the matching bracket.
                 // The map is keyed by positions in the code string,
                 // so the lookup should use strptr.
-                strptr = positions[tpptr]++;
+
+                // i was updating this as tpptr , so i changed it to strptr  , because we need it to move across the string , if something needs to be moved
+                strptr = positions[strptr] + 1;
             }
             else
             {
@@ -271,7 +274,10 @@ int main()
                      << endl;
                 // Cell is non-zero: jump back to the start of the loop.
                 // This uses the reverse lookup.
-                strptr = revpos[strptr]++;
+                strptr = revpos[strptr] + 1;
+
+                // changed the incrementation seperately , so that it uses the value and then increment
+                // this is the error ? I was updating something in the map , I would need to update the value of the variable in the first place ;
             }
             else
             {

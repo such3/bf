@@ -1,3 +1,7 @@
+learn to use this command 
+
+```g++ -g -Wall -Wextra -fsanitize=address,undefined main.cpp -o main```
+
 Here's the review. I'll point at where things go wrong and give you questions to chase, not fixes.
 
 ## What you got right
