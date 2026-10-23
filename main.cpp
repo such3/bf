@@ -29,6 +29,16 @@ TODO: Find a way to print characters using their integer representation,
 and understand the unsigned representation.
 */
 
+/*
+Reflections on the bracket jumps:
+- Jumping to just after the matching bracket is correct for both '[' and ']'.
+- Re-testing the condition after the jump is unnecessary: the cell has not
+  changed between the test that triggered the jump and the landing point.
+- The textbook rule says ']' jumps back to the matching '[', which then
+  re-tests the cell. Landing just after '[' is an equivalent shortcut that
+  gives the same tape and output.
+*/
+
 void encWrt(char c)
 {
     cout << "Encountered " << c << endl;
@@ -47,7 +57,7 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
         {
             stk.push(i);
         }
-        // Note: I made an error here earlier.
+        // Note: this part had a bug in an earlier version.
         if (str[i] == ']')
         {
             if (!stk.empty())
@@ -100,7 +110,9 @@ int main()
     string rdTxt;
 
     // Read the BF code from input.txt.
-    // need improvements and safety measure  to be taken in file handling , so that we dont fail when we hit EOF or smth and also how to handle the file when we have multiple lines of code ?
+    // TODO: Make the file handling safer, so that we don't fail when we hit
+    // EOF or similar, and decide how to handle code that spans multiple
+    // lines. For now, only a single line of code is supported.
     ifstream file("input.txt");
     while (getline(file, rdTxt))
     {
@@ -173,7 +185,7 @@ int main()
             // Move the tape index to the right.
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (char)tape[tpptr]                   // Cast to number
+                 << " Tape content : " << (char)tape[tpptr]                   // Cast to char
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
             tpptr++;
@@ -243,11 +255,11 @@ int main()
                      << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                      << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                      << endl;
-                // Cell is zero: look up the matching bracket.
-                // The map is keyed by positions in the code string,
-                // so the lookup should use strptr.
-
-                // i was updating this as tpptr , so i changed it to strptr  , because we need it to move across the string , if something needs to be moved
+                // Cell is zero: look up the matching bracket and continue
+                // one position after it.
+                // Note: I originally used tpptr as the key. The map is keyed
+                // by positions in the code string, so the lookup must use
+                // strptr, because it is the string position that moves here.
                 strptr = positions[strptr] + 1;
             }
             else
@@ -272,12 +284,14 @@ int main()
                      << " Tape content : " << (int)tape[tpptr]                    // Cast to number
                      << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                      << endl;
-                // Cell is non-zero: jump back to the start of the loop.
-                // This uses the reverse lookup.
+                // Cell is non-zero: jump back to the start of the loop,
+                // using the reverse lookup, and continue one position after
+                // the matching '['.
+                // Note: the earlier version used a post-increment on the map
+                // entry (revpos[strptr]++), which modified the map instead of
+                // only reading it. Now the value is read from the map and 1 is
+                // added to it separately, so the map stays unchanged.
                 strptr = revpos[strptr] + 1;
-
-                // changed the incrementation seperately , so that it uses the value and then increment
-                // this is the error ? I was updating something in the map , I would need to update the value of the variable in the first place ;
             }
             else
             {
