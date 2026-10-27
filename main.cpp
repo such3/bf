@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
-#include <string> // solved an error 
+#include <string> // solved an error
 #include <stack>
 using namespace std;
 
@@ -45,14 +45,14 @@ void encWrt(char c)
     cout << "Encountered " << c << endl;
 }
 
-// this is a function which I will use it for printing all the traces 
-// questions which i need to ask 
-// so how do  i access the variables 
-// learning part 
-//  Dumping problem solution - what is the solution 
-// 
+// this is a function which I will use it for printing all the traces
+// questions which i need to ask
+// so how do  i access the variables
+// learning part
+//  Dumping problem solution - what is the solution
+//
 
-void dumpState(){}
+void dumpState() {}
 
 // note : how to handle unbalanced brackets ?
 // how will  i identify them ?
@@ -80,21 +80,24 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
                 rpos[i] = stk.top();
                 stk.pop();
                 continue;
-                // fixed this bug , added continue , earlier it was just hitting it on every character  bcz i did not continue the loop , or come out of that iteration , I applied the same above in another if block too 
+                // fixed this bug , added continue , earlier it was just hitting it on every character  bcz i did not continue the loop , or come out of that iteration , I applied the same above in another if block too
             }
 
-            // we reach here where we encounter a ']' , but we dont have a correponding opening bracket 
+            // we reach here where we encounter a ']' , but we dont have a correponding opening bracket
             cout << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
             // learn more about exit codes , what is the significance of them ?
-            exit(0);
+            // exit 0 means success
+            // but it is not a success here , so I am replacing it with 1
+            exit(1);
             return;
         }
     }
-    if(!stk.empty()){
+    if (!stk.empty())
+    {
         // if we have somemthing on stack , that is if we have a just [ and we have not ] to pop it out , then we enter here .
         cout << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
         // check for exit codes here too
-        exit(0);
+        exit(1);
         return;
     }
 }
@@ -104,7 +107,17 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
 //     cout << "Contents of the Cell : " << ptr(tape;
 // }
 
-int main()
+// taking  file name as input from command line
+// here argc is the number of parameters
+// argc = number of command-line arguments, including the program name.
+// example : g++ main.cpp -o run
+// ./run hello world 123
+// Number of arguments: 4
+// Argument 0: ./run
+// Argument 1: hello
+// Argument 2: world
+// Argument 3: 123
+int main(int argc, char *argv[])
 {
     cout << "This is a brainfuck compiler!" << endl;
 
@@ -135,20 +148,58 @@ int main()
     // on the 30000-cell tape.
     int tpptr = 0;  // tape pointer
     int strptr = 0; // string pointer
-    string rdLine , rdTxt;
+    string rdLine, rdTxt;
 
     // Read the BF code from input.txt.
     // TODO: Make the file handling safer, so that we don't fail when we hit
     // EOF or similar, and decide how to handle code that spans multiple
     // lines. For now, only a single line of code is supported.
-    ifstream file("input.txt");
+    string input_file_name;
+
+    // print the cmd line params
+
+    cout << " \n Number of  cmd line args : " << argc << endl;
+
+    for (int i = 0; i < argc; i++)
+    {
+        cout << "Arguement " << i << " : " << argv[i] << endl;
+    }
+
+    // we consider the param at index 1 as the file containing the input code
+    input_file_name = argv[1];
+
+    // now this after review 2 , so , we need to make this robut , we need to take the input file from the cmd line
+    // we will take the file name as command line arguements
+    ifstream file(input_file_name);
+    // what if this file does not exist at all ? or the file is just empty ?
+    //  how to handle file handling based errors ?
+    // look up on the internet
+    // file.is_open() is my answer
+    if (!file.is_open())
+    {
+        cout << "\n[ERROR] Error in opening file !! or File does not exist !! \n";
+        exit(1);
+    }
+
+    // now one more thing to focus  is , is there even any data in file ?
+    // add a simple check
+
+    if (file.peek() == EOF)
+    {
+        cout << "\n[ERROR] There are no contents in this file !! \n";
+        exit(1);
+    }
+
     while (getline(file, rdLine))
     {
         cout << " The text in the file : " << rdLine << endl;
-        // Once we extract a line , we will  simply append it 
+        // Once we extract a line , we will  simply append it
         rdTxt.append(rdLine);
         cout << "[APPEND LOGS] After appending , we have this content : " << rdTxt << endl;
     }
+
+    // closing the file , because we might not need it further
+    file.close();
     computerPos(rdTxt, positions, revpos);
 
     // Print what we calculated.
@@ -177,12 +228,13 @@ int main()
 
     // Iteration counter.
     int cnt = 0;
-    while (strptr < rdTxt.length() )
+    while (strptr < rdTxt.length())
     {
-        // check for thr upper bound 
-        // report an error and exit from the loop 
+        // check for thr upper bound
+        // report an error and exit from the loop
         // fox this bug : I was checking the tape overflow with cnt , it should be tpptr
-        if(tpptr == 30000){
+        if (tpptr == 30000)
+        {
             cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
             break;
         }
@@ -243,9 +295,12 @@ int main()
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
             // Move the tape index to the left.
-            // fix :  if we are already at tpptr = 0  , then dont update it 
-            if(tpptr == 0){
+            // fix :  if we are already at tpptr = 0  , then dont update it
+            if (tpptr == 0)
+            {
                 cout << "[DEBUG] Not moving tpptr , or else tpptr will go in negative " << endl;
+                // I made one more mistake here , so i was not modifying tpptr , but i need to update strptr anyhow
+                strptr++;
                 break;
             }
             tpptr--;
