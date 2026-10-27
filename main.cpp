@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
+#include <string> // solved an error 
 #include <stack>
 using namespace std;
 
@@ -44,8 +45,19 @@ void encWrt(char c)
     cout << "Encountered " << c << endl;
 }
 
-// void dumpState()
+// this is a function which I will use it for printing all the traces 
+// questions which i need to ask 
+// so how do  i access the variables 
+// learning part 
+//  Dumping problem solution - what is the solution 
+// 
 
+void dumpState(){}
+
+// note : how to handle unbalanced brackets ?
+// how will  i identify them ?
+// que2 : now , how do we identify the same in nested loops ?
+// example : ++++[*-***-*>**>]]
 void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
 {
     // Compute the matching position for each bracket so that
@@ -56,6 +68,7 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
         if (str[i] == '[')
         {
             stk.push(i);
+            continue;
         }
         // Note: this part had a bug in an earlier version.
         if (str[i] == ']')
@@ -66,8 +79,23 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
                 pos[stk.top()] = i;
                 rpos[i] = stk.top();
                 stk.pop();
+                continue;
+                // fixed this bug , added continue , earlier it was just hitting it on every character  bcz i did not continue the loop , or come out of that iteration , I applied the same above in another if block too 
             }
+
+            // we reach here where we encounter a ']' , but we dont have a correponding opening bracket 
+            cout << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
+            // learn more about exit codes , what is the significance of them ?
+            exit(0);
+            return;
         }
+    }
+    if(!stk.empty()){
+        // if we have somemthing on stack , that is if we have a just [ and we have not ] to pop it out , then we enter here .
+        cout << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
+        // check for exit codes here too
+        exit(0);
+        return;
     }
 }
 
@@ -107,16 +135,19 @@ int main()
     // on the 30000-cell tape.
     int tpptr = 0;  // tape pointer
     int strptr = 0; // string pointer
-    string rdTxt;
+    string rdLine , rdTxt;
 
     // Read the BF code from input.txt.
     // TODO: Make the file handling safer, so that we don't fail when we hit
     // EOF or similar, and decide how to handle code that spans multiple
     // lines. For now, only a single line of code is supported.
     ifstream file("input.txt");
-    while (getline(file, rdTxt))
+    while (getline(file, rdLine))
     {
-        cout << " The text in the file : " << rdTxt << endl;
+        cout << " The text in the file : " << rdLine << endl;
+        // Once we extract a line , we will  simply append it 
+        rdTxt.append(rdLine);
+        cout << "[APPEND LOGS] After appending , we have this content : " << rdTxt << endl;
     }
     computerPos(rdTxt, positions, revpos);
 
@@ -146,8 +177,16 @@ int main()
 
     // Iteration counter.
     int cnt = 0;
-    while (strptr < rdTxt.length() && tpptr < 30000)
+    while (strptr < rdTxt.length() )
     {
+        // check for thr upper bound 
+        // report an error and exit from the loop 
+        // fox this bug : I was checking the tape overflow with cnt , it should be tpptr
+        if(tpptr == 30000){
+            cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
+            break;
+        }
+
         cout << "------------------------------------------------" << endl;
         cout << "Iteration : " << cnt++ << endl;
 
@@ -185,7 +224,8 @@ int main()
             // Move the tape index to the right.
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (char)tape[tpptr]                   // Cast to char
+                 // I was casting it to a char here , but I belive I did it because I was seeing integers and I wanted to see the chars
+                 << " Tape content : " << (int)tape[tpptr]                    // Cast to char
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
             tpptr++;
@@ -203,6 +243,11 @@ int main()
                  << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
                  << endl;
             // Move the tape index to the left.
+            // fix :  if we are already at tpptr = 0  , then dont update it 
+            if(tpptr == 0){
+                cout << "[DEBUG] Not moving tpptr , or else tpptr will go in negative " << endl;
+                break;
+            }
             tpptr--;
             strptr++;
 
