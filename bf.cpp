@@ -173,6 +173,18 @@ int main(int argc, char *argv[])
     // TODO(T-2): move behind the verbose flag.
     cout << " \n Number of  cmd line args : " << argc << endl;
 
+    // we need to check if we even have the file name in the command 
+    if(argc < 2){
+        cout << "\n[ERROR] Command requires input file as a parameter !!\n";
+        exit(1);
+    }
+
+    // decisions to make 
+    // are we handling multiple files as of now ? 
+    // in version 1 , we will just use single input 
+    // will add verbose flag and some other command line args 
+    // to make the overall program robust 
+
     for (int i = 0; i < argc; i++)
     {
         cout << "Arguement " << i << " : " << argv[i] << endl;
@@ -263,7 +275,10 @@ int main(int argc, char *argv[])
         if (tpptr == 30000)
         {
             cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
-            break;
+            // here I am breaking the loop , but I need to exit the program , so I will use exit code 
+            // break;
+            // exit here because of tape bounds overflow 
+            exit(1);
         }
 
         cout << "------------------------------------------------" << endl;
@@ -429,6 +444,18 @@ int main(int argc, char *argv[])
                  << endl;
             strptr++;
             cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
+
+
+            // debug liines ( remove after checks )
+
+            // cout << " Char at default " << rdTxt[strptr] << endl;
+
+            // check for non-brainfuck characters 
+            if(rdTxt[strptr] != '\t' || rdTxt[strptr] != '\n' || rdTxt[strptr] != '\0'){
+                
+                cout << "[ERROR] Unsupported Character : " << rdTxt[strptr] << endl;
+                exit(1);
+            }
         }
         cout << "------------------------------------------------" << endl;
     }
