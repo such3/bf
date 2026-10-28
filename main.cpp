@@ -1,163 +1,176 @@
+// =============================================================================
+// bf.cpp : a Brainfuck interpreter (learning project)
+//
+// Usage:  ./bf <program.bf>
+// Build:  g++ -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined src/bf.cpp -o bf
+//
+// Status: Stage 0 (hardening). Open bugs and to-dos are in docs/TRACKER.md,
+//         the plan is in docs/ROADMAP.md, code reviews are in docs/reviews/.
+//
+// Comment conventions in this file
+//   NOTE:      why the code is the way it is right now
+//   TODO(ID):  open work; ID is an entry in docs/TRACKER.md
+// Fix history belongs in git commits and the tracker's Done log, not here.
+// =============================================================================
+
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
-#include <string> // solved an error
+#include <string>
 #include <stack>
+// TODO(CLEAN-5): add <cstdlib>; exit() currently arrives through another header.
 using namespace std;
 
-/*
-Problems encountered:
-- std::unordered_map has no built-in two-way lookup, so for now I use
-  two maps: one for '[' -> ']' and one for ']' -> '['.
-*/
+// -----------------------------------------------------------------------------
+// Design notes
+// -----------------------------------------------------------------------------
+//
+// Machine model
+//   strptr  index of the next instruction in the program text (program counter)
+//   tpptr   index of the current cell on the tape (data pointer)
+//   tape    30000 unsigned 8-bit cells, all start at 0; arithmetic wraps
+//
+// Bracket jumps
+//   Both '[' and ']' land one position AFTER the matching bracket.
+//     '[' with a zero cell     : jump past the matching ']'
+//     ']' with a nonzero cell  : jump back to just after the matching '['
+//   Re-testing the cell at the bracket itself is unnecessary: the cell cannot
+//   change between the test that triggered the jump and the landing point.
+//   Some formulations land on the bracket and re-test; the result is the same.
+//
+// Jump tables
+//   Two unordered_maps give two-way lookup, keyed by position in the program
+//   text (not by tape position):
+//     positions[i] = index of the ']' matching the '[' at i
+//     revpos[j]    = index of the '[' matching the ']' at j
+//   TODO(T-6): replace the two maps with one compact table.
+//
+// Trace output
+//   Every instruction prints a state dump. Two casts keep it readable:
+//     - A tape cell is an unsigned char, which cout prints as a character.
+//       Cast to int to print its numeric value.
+//     - A program character is cast through unsigned char first, so bytes
+//       above 127 do not turn into negative numbers.
+//   TODO(T-1): the dump is copy-pasted into every case; move it into dumpState().
+//   TODO(T-2): put the trace behind a verbose flag and keep it separate from
+//              the program's own output.
+//   TODO(Q-2): finish understanding the unsigned representation and printing
+//              characters by their integer value.
+//
+// Open policy questions
+//   DEC-1  what '<' at cell 0 should do (currently ignored, see case '<')
+//   DEC-3  exit codes (currently 1 for every failure)
+//   DEC-5  what counts as an empty program
 
-/*
-Specific changes for printing the values on the tape:
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
 
-cout << "Dump State : Tape ptr : " << tpptr
-     << " String ptr : " << strptr
-     // 1. Cast to (int) so cell values like 0 or 65 print as numbers
-     //    ("0", "65") instead of characters.
-     << " Tape content : " << (int)tape[tpptr]
-     // 2. Cast to (unsigned char) and then to (int) to safely print the
-     //    character's numeric ASCII code.
-     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-     << endl;
-*/
-
-/*
-TODO: Find a way to print characters using their integer representation,
-and understand the unsigned representation.
-*/
-
-/*
-Reflections on the bracket jumps:
-- Jumping to just after the matching bracket is correct for both '[' and ']'.
-- Re-testing the condition after the jump is unnecessary: the cell has not
-  changed between the test that triggered the jump and the landing point.
-- The textbook rule says ']' jumps back to the matching '[', which then
-  re-tests the cell. Landing just after '[' is an equivalent shortcut that
-  gives the same tape and output.
-*/
-
+// Trace: announces the instruction being executed.
 void encWrt(char c)
 {
     cout << "Encountered " << c << endl;
 }
 
-// this is a function which I will use it for printing all the traces
-// questions which i need to ask
-// so how do  i access the variables
-// learning part
-//  Dumping problem solution - what is the solution
-//
-
+// Trace: prints the machine state for the current instruction.
+// TODO(T-1): implement. Plan: put tape, tpptr and strptr (and decide about the
+//            program text, DEC-7) in one struct and take it by const reference.
 void dumpState() {}
 
-// note : how to handle unbalanced brackets ?
-// how will  i identify them ?
-// que2 : now , how do we identify the same in nested loops ?
-// example : ++++[*-***-*>**>]]
+// Checks that every bracket in `str` is matched and records each pair in
+// `pos` and `rpos` (see "Jump tables" above).
+//
+// A stack handles nesting: each ']' pairs with the innermost open '['.
+// An unmatched bracket prints an error and exits with status 1.
+// Example of an invalid program: ++++[*-***-*>**>]]   (the last ']' has no '[')
+//
+// TODO(CLEAN-3): rename to computePos; take `const string &str`.
+// TODO(CLEAN-4): compare with size_t instead of int in the loop.
+// TODO(CLEAN-2): include the index of the offending bracket in the messages and
+//                fix the spelling of "parentheses".
+// TODO(BUG-2): error messages go to cout; they belong on cerr.
+// TODO(Q-9): decide whether a helper should be allowed to call exit().
 void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
 {
-    // Compute the matching position for each bracket so that
-    // nested loops are handled correctly.
     stack<int> stk;
     for (int i = 0; i < str.size(); i++)
     {
         if (str[i] == '[')
         {
             stk.push(i);
+            // TODO(CLEAN-1): check whether this continue is needed.
             continue;
         }
-        // Note: this part had a bug in an earlier version.
         if (str[i] == ']')
         {
             if (!stk.empty())
             {
-                // Two maps give us bidirectional lookup.
                 pos[stk.top()] = i;
                 rpos[i] = stk.top();
                 stk.pop();
+                // NOTE: required. Without it, a matched ']' would fall through
+                // to the unmatched-']' error below.
                 continue;
-                // fixed this bug , added continue , earlier it was just hitting it on every character  bcz i did not continue the loop , or come out of that iteration , I applied the same above in another if block too
             }
 
-            // we reach here where we encounter a ']' , but we dont have a correponding opening bracket
+            // A ']' with no open '['.
             cout << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
-            // learn more about exit codes , what is the significance of them ?
-            // exit 0 means success
-            // but it is not a success here , so I am replacing it with 1
+            // Exit status 0 means success, so a failure must exit nonzero.
             exit(1);
+            // TODO: unreachable after exit(); remove.
             return;
         }
     }
+
+    // Anything left on the stack is a '[' that was never closed.
     if (!stk.empty())
     {
-        // if we have somemthing on stack , that is if we have a just [ and we have not ] to pop it out , then we enter here .
         cout << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
-        // check for exit codes here too
         exit(1);
+        // TODO: unreachable after exit(); remove.
         return;
     }
 }
 
-// void printCell(int &ptr, int &tape)
-// {
-//     cout << "Contents of the Cell : " << ptr(tape;
-// }
+// -----------------------------------------------------------------------------
+// main
+//   1. Read the command line
+//   2. Open and read the program file
+//   3. Validate brackets and build the jump tables
+//   4. Execute
+// -----------------------------------------------------------------------------
 
-// taking  file name as input from command line
-// here argc is the number of parameters
-// argc = number of command-line arguments, including the program name.
-// example : g++ main.cpp -o run
-// ./run hello world 123
-// Number of arguments: 4
-// Argument 0: ./run
-// Argument 1: hello
-// Argument 2: world
-// Argument 3: 123
+// argc counts the arguments including the program name:
+//   ./bf prog.bf   ->   argc = 2, argv[0] = "./bf", argv[1] = "prog.bf"
 int main(int argc, char *argv[])
 {
+    // TODO(CLEAN-7): this is an interpreter, not a compiler.
     cout << "This is a brainfuck compiler!" << endl;
 
-    // ----- Tape -----
-    // Declarations of variables and data structures.
-    //
-    // Questions to answer about the tape:
-    // - How do I handle the pointer going below 0 (e.g. -1, -2) or
-    //   past 30000?
-    // - Should I throw an error, or take the absolute value / modulus
-    //   and wrap around?
-    // - Wrapping with a modulus would just overwrite existing content,
-    //   which gives wrong output.
-    // - By default, every cell on the tape is initialised to 0.
+    // ---- Machine state ----
+
+    // The tape: 30000 cells, zero-initialised, 8-bit unsigned so arithmetic wraps.
+    // Pointer policy: past the right end stops the program with [OVERFLOW];
+    // at the left end the move is ignored (DEC-1, DEC-2).
     unsigned char tape[30000] = {0};
 
-    // Note from Google AI: with my current approach, printing the tape
-    // contents won't work. I need to find out why and study that exact
-    // behaviour.
-    // There is one more error here: printing the array contents.
-
-    // Using two maps:
-    // one to look up the match for '[' and one to look up the match for ']'.
+    // Jump tables, filled in by computerPos (see "Jump tables" above).
     unordered_map<int, int> positions;
     unordered_map<int, int> revpos;
 
-    // Not a real pointer, just an index that tracks where we are
-    // on the 30000-cell tape.
-    int tpptr = 0;  // tape pointer
-    int strptr = 0; // string pointer
+    // Indices, not real pointers.
+    int tpptr = 0;  // current cell on the tape
+    int strptr = 0; // next instruction in the program text
+
+    // rdLine: the line just read. rdTxt: the whole program, lines concatenated.
     string rdLine, rdTxt;
 
-    // Read the BF code from input.txt.
-    // TODO: Make the file handling safer, so that we don't fail when we hit
-    // EOF or similar, and decide how to handle code that spans multiple
-    // lines. For now, only a single line of code is supported.
+    // ---- 1. Command line ----
+
     string input_file_name;
 
-    // print the cmd line params
-
+    // Debug: print the arguments.
+    // TODO(T-2): move behind the verbose flag.
     cout << " \n Number of  cmd line args : " << argc << endl;
 
     for (int i = 0; i < argc; i++)
@@ -165,74 +178,88 @@ int main(int argc, char *argv[])
         cout << "Arguement " << i << " : " << argv[i] << endl;
     }
 
-    // we consider the param at index 1 as the file containing the input code
+    // argv[1] is the path of the Brainfuck program.
+    // TODO(BUG-5): argc is never checked. Running ./bf with no arguments reads a
+    //              null pointer here. Print a usage message and exit with
+    //              failure. Also decide what to do with extra arguments (DEC-8).
     input_file_name = argv[1];
 
-    // now this after review 2 , so , we need to make this robut , we need to take the input file from the cmd line
-    // we will take the file name as command line arguements
+    // ---- 2. Read the program ----
+
     ifstream file(input_file_name);
-    // what if this file does not exist at all ? or the file is just empty ?
-    //  how to handle file handling based errors ?
-    // look up on the internet
-    // file.is_open() is my answer
+
+    // The file could not be opened (missing, no permission, ...).
     if (!file.is_open())
     {
         cout << "\n[ERROR] Error in opening file !! or File does not exist !! \n";
         exit(1);
     }
 
-    // now one more thing to focus  is , is there even any data in file ?
-    // add a simple check
-
+    // The file is empty.
+    // TODO(BUG-6): peek() only catches a 0-byte file. A file with only
+    //              whitespace, or with no Brainfuck commands, passes this check.
+    //              Decide what counts as empty (DEC-5) and check after reading.
     if (file.peek() == EOF)
     {
         cout << "\n[ERROR] There are no contents in this file !! \n";
         exit(1);
     }
 
+    // Read line by line and concatenate.
+    // NOTE: rdLine is separate from rdTxt because the final, failing getline
+    // call clears the string it reads into; reading straight into rdTxt would
+    // leave it empty.
+    // NOTE: concatenating loses line and column information (DEC-6, T-11).
     while (getline(file, rdLine))
     {
         cout << " The text in the file : " << rdLine << endl;
-        // Once we extract a line , we will  simply append it
         rdTxt.append(rdLine);
         cout << "[APPEND LOGS] After appending , we have this content : " << rdTxt << endl;
     }
 
-    // closing the file , because we might not need it further
+    // The program is in memory, so the file is no longer needed.
+    // (The ifstream would also close itself at the end of main.)
     file.close();
+
+    // ---- 3. Validate brackets and build the jump tables ----
+
     computerPos(rdTxt, positions, revpos);
 
-    // Print what we calculated.
-    // First map:
+    // Debug: print the jump tables.
+    // TODO(T-2): move behind the verbose flag.
     cout << "Contents of Forward Map " << endl;
     for (const auto &pair : positions)
     {
         cout << pair.first << ": " << pair.second << "\n";
     }
 
-    // Second map:
     cout << "Contents of Backward Map " << endl;
     for (const auto &pair : revpos)
     {
         cout << pair.first << ": " << pair.second << "\n";
     }
 
-    // Process the text.
+    // ---- 4. Execute ----
+
     cout << "We will process the bf pl here " << endl;
 
-    /*
-    Things to keep in mind:
-    strptr advances after every character, while tpptr only changes
-    on '>' and '<'. '[' and ']' may also change strptr (jumps).
-    */
+    // Rule for every case below: strptr must advance or jump, otherwise the
+    // same instruction repeats forever. tpptr changes only on '>' and '<'.
+    // '[' and ']' may also change strptr (jumps).
 
-    // Iteration counter.
+    // Iteration counter, for the trace only.
     int cnt = 0;
+
+    // TODO(CLEAN-4): int vs size_t comparison.
+    // TODO(T-4): add a step limit so a runaway loop cannot hang the program.
     while (strptr < rdTxt.length())
     {
-        // check for thr upper bound
-        // report an error and exit from the loop
-        // fox this bug : I was checking the tape overflow with cnt , it should be tpptr
+        // Stop when the tape pointer has run off the right end. Checked at the
+        // top of the iteration, before any cell is accessed. This break is
+        // outside the switch, so it leaves the while loop.
+        // TODO(BUG-2): the program then ends with `return 0` (success) and
+        //              reports on cout. It should fail with a nonzero status
+        //              and report on cerr.
         if (tpptr == 30000)
         {
             cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
@@ -246,12 +273,12 @@ int main(int argc, char *argv[])
         switch (rdTxt[strptr])
         {
         case '+':
+            // Increment the current cell (255 wraps to 0).
             encWrt(rdTxt[strptr]);
-            // Increment the value at the current cell by one.
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
             tape[tpptr]++;
             strptr++;
@@ -259,47 +286,48 @@ int main(int argc, char *argv[])
             break;
 
         case '-':
+            // Decrement the current cell (0 wraps to 255).
             encWrt(rdTxt[strptr]);
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
-            // Decrement the value at the current cell by one.
             tape[tpptr]--;
             strptr++;
 
             break;
 
         case '>':
+            // Move the data pointer right. Running past the last cell is
+            // caught at the top of the next iteration.
             encWrt(rdTxt[strptr]);
-            // Move the tape index to the right.
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 // I was casting it to a char here , but I belive I did it because I was seeing integers and I wanted to see the chars
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to char
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
             tpptr++;
-            // Earlier error: I forgot to increment strptr, so the same
-            // character was printed repeatedly.
             strptr++;
 
             break;
 
         case '<':
+            // Move the data pointer left.
+            // TODO(DEC-1): at cell 0 the move is silently ignored and the
+            //              program carries on with the wrong cell. Decide
+            //              whether this should stop with an error instead, to
+            //              match the right end.
             encWrt(rdTxt[strptr]);
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
-            // Move the tape index to the left.
-            // fix :  if we are already at tpptr = 0  , then dont update it
             if (tpptr == 0)
             {
                 cout << "[DEBUG] Not moving tpptr , or else tpptr will go in negative " << endl;
-                // I made one more mistake here , so i was not modifying tpptr , but i need to update strptr anyhow
+                // NOTE: strptr must advance even though tpptr does not move.
                 strptr++;
                 break;
             }
@@ -309,96 +337,83 @@ int main(int argc, char *argv[])
             break;
 
         case '.':
+            // Output the current cell.
+            // TODO(BUG-4): the label and the trace are mixed into the program's
+            //              output. A Brainfuck program should print only the
+            //              character itself.
             encWrt(rdTxt[strptr]);
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
-            // Print the current value of the cell.
             cout << " Content in the Cell : " << tape[tpptr] << endl;
             strptr++;
 
             break;
 
         case ',':
+            // Read one character into the current cell.
+            // TODO(T-10): not implemented; the instruction is skipped.
             encWrt(rdTxt[strptr]);
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
-            // Reads input.
-            // Skipped for phase 1.
             strptr++;
 
             break;
 
         case '[':
-            // Rule:
-            // On '[', check whether the current cell is zero.
-            // If it is zero, jump to the matching ']' and continue after it.
-            /*
-            My thinking:
-            Take code like +++++++[>++++++++++<-]>.
-            When I encounter '[', I check whether the current cell is 0.
-            If it is not, I continue with the next character.
-            If it is 0, I need to move the pointer past the matching ']'.
-            Can we do this by looking the position up in the map?
-            */
+            // Zero cell: skip the loop by jumping just past the matching ']'.
+            // Nonzero cell: enter the loop body.
+            // NOTE: the lookup key is strptr (position in the program text),
+            // not tpptr (position on the tape).
             encWrt(rdTxt[strptr]);
 
             if (tape[tpptr] == 0)
             {
                 cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << " Tape content : " << (int)tape[tpptr]
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                      << endl;
-                // Cell is zero: look up the matching bracket and continue
-                // one position after it.
-                // Note: I originally used tpptr as the key. The map is keyed
-                // by positions in the code string, so the lookup must use
-                // strptr, because it is the string position that moves here.
                 strptr = positions[strptr] + 1;
             }
             else
             {
                 cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << " Tape content : " << (int)tape[tpptr]
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                      << endl;
-                // Cell is non-zero: just step into the loop body.
                 strptr++;
             }
 
             break;
 
         case ']':
+            // Nonzero cell: jump back to just after the matching '['.
+            // Zero cell: leave the loop.
+            // NOTE: the jump target is read from revpos and 1 is added to the
+            // value; the stored entry is not modified.
             encWrt(rdTxt[strptr]);
             if (tape[tpptr] != 0)
             {
                 cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << " Tape content : " << (int)tape[tpptr]
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                      << endl;
-                // Cell is non-zero: jump back to the start of the loop,
-                // using the reverse lookup, and continue one position after
-                // the matching '['.
-                // Note: the earlier version used a post-increment on the map
-                // entry (revpos[strptr]++), which modified the map instead of
-                // only reading it. Now the value is read from the map and 1 is
-                // added to it separately, so the map stays unchanged.
                 strptr = revpos[strptr] + 1;
             }
             else
             {
                 cout << "Dump State : Tape ptr : " << tpptr
                      << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                     << " Tape content : " << (int)tape[tpptr]
+                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                      << endl;
                 strptr++;
             }
@@ -406,12 +421,12 @@ int main(int argc, char *argv[])
             break;
 
         default:
+            // Any other character is a comment and is skipped.
             cout << "Dump State : Tape ptr : " << tpptr
                  << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]                    // Cast to number
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr] // Cast to number safely
+                 << " Tape content : " << (int)tape[tpptr]
+                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
                  << endl;
-            // Spaces, newlines, tabs and other characters are skipped.
             strptr++;
             cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
         }
