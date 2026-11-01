@@ -26,8 +26,8 @@ using namespace std;
 // -----------------------------------------------------------------------------
 //
 // Machine model
-//   strptr  index of the next instruction in the program text (program counter)
-//   tpptr   index of the current cell on the tape (data pointer)
+//   data1.strptr  index of the next instruction in the program text (program counter)
+//   data1.tpptr   index of the current cell on the tape (data pointer)
 //   tape    30000 unsigned 8-bit cells, all start at 0; arithmetic wraps
 //
 // Bracket jumps
@@ -62,9 +62,30 @@ using namespace std;
 //   DEC-3  exit codes (currently 1 for every failure)
 //   DEC-5  what counts as an empty program
 
+
+// creating a struct to store the information 
+
+struct Details
+{
+      /* data */
+    int strptr = 0;
+    int tpptr = 0;
+    string rdtxt;
+    unsigned char tape[30000]  = {0};
+};
+
+
+
+
+
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+
+
+
+
 
 // Trace: announces the instruction being executed.
 void encWrt(char c)
@@ -73,9 +94,16 @@ void encWrt(char c)
 }
 
 // Trace: prints the machine state for the current instruction.
-// TODO(T-1): implement. Plan: put tape, tpptr and strptr (and decide about the
+// TODO(T-1): implement. Plan: put tape, data1.tpptr and data1.strptr (and decide about the
 //            program text, DEC-7) in one struct and take it by const reference.
-void dumpState() {}
+void dumpState(const Details &data) {
+    cout << "Dump State : Tape ptr : " << data.tpptr
+                 << " String ptr : " << data.strptr
+                 << " Tape content : " << (int)data.tape[data.tpptr]
+                 << " String Content : " << (int)(unsigned char)data.rdtxt[data.strptr]
+                 << endl;
+
+}
 
 // Checks that every bracket in `str` is matched and records each pair in
 // `pos` and `rpos` (see "Jump tables" above).
@@ -144,6 +172,10 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
 //   ./bf prog.bf   ->   argc = 2, argv[0] = "./bf", argv[1] = "prog.bf"
 int main(int argc, char *argv[])
 {
+
+    // init the struct
+    Details data1;
+
     // TODO(CLEAN-7): this is an interpreter, not a compiler.
     cout << "This is a brainfuck compiler!" << endl;
 
@@ -152,15 +184,19 @@ int main(int argc, char *argv[])
     // The tape: 30000 cells, zero-initialised, 8-bit unsigned so arithmetic wraps.
     // Pointer policy: past the right end stops the program with [OVERFLOW];
     // at the left end the move is ignored (DEC-1, DEC-2).
-    unsigned char tape[30000] = {0};
+    
+    // fixed this tape into the struct 
+    // unsigned char tape[30000] = {0};
 
     // Jump tables, filled in by computerPos (see "Jump tables" above).
     unordered_map<int, int> positions;
     unordered_map<int, int> revpos;
 
     // Indices, not real pointers.
-    int tpptr = 0;  // current cell on the tape
-    int strptr = 0; // next instruction in the program text
+    // int data1.tpptr = 0;  // current cell on the tape
+    data1.tpptr = 0;
+    // int data1.strptr = 0; // next instruction in the program text
+    data1.strptr = 0;
 
     // rdLine: the line just read. rdTxt: the whole program, lines concatenated.
     string rdLine, rdTxt;
@@ -229,6 +265,11 @@ int main(int argc, char *argv[])
         cout << "[APPEND LOGS] After appending , we have this content : " << rdTxt << endl;
     }
 
+
+    // copy the rdtxt 
+    data1.rdtxt = rdTxt;
+
+
     // The program is in memory, so the file is no longer needed.
     // (The ifstream would also close itself at the end of main.)
     file.close();
@@ -255,16 +296,16 @@ int main(int argc, char *argv[])
 
     cout << "We will process the bf pl here " << endl;
 
-    // Rule for every case below: strptr must advance or jump, otherwise the
-    // same instruction repeats forever. tpptr changes only on '>' and '<'.
-    // '[' and ']' may also change strptr (jumps).
+    // Rule for every case below: data1.strptr must advance or jump, otherwise the
+    // same instruction repeats forever. data1.tpptr changes only on '>' and '<'.
+    // '[' and ']' may also change data1.strptr (jumps).
 
     // Iteration counter, for the trace only.
     int cnt = 0;
 
     // TODO(CLEAN-4): int vs size_t comparison.
     // TODO(T-4): add a step limit so a runaway loop cannot hang the program.
-    while (strptr < rdTxt.length())
+    while (data1.strptr < data1.rdtxt.length())
     {
         // Stop when the tape pointer has run off the right end. Checked at the
         // top of the iteration, before any cell is accessed. This break is
@@ -272,7 +313,7 @@ int main(int argc, char *argv[])
         // TODO(BUG-2): the program then ends with `return 0` (success) and
         //              reports on cout. It should fail with a nonzero status
         //              and report on cerr.
-        if (tpptr == 30000)
+        if (data1.tpptr == 30000)
         {
             cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
             // here I am breaking the loop , but I need to exit the program , so I will use exit code 
@@ -284,46 +325,54 @@ int main(int argc, char *argv[])
         cout << "------------------------------------------------" << endl;
         cout << "Iteration : " << cnt++ << endl;
 
-        cout << " char : " << rdTxt[strptr] << endl;
-        switch (rdTxt[strptr])
+        cout << " char : " << data1.rdtxt[data1.strptr] << endl;
+        switch (data1.rdtxt[data1.strptr])
         {
         case '+':
             // Increment the current cell (255 wraps to 0).
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            tape[tpptr]++;
-            strptr++;
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+            dumpState(data1);
+            data1.tape[data1.tpptr]++;
+            data1.strptr++;
 
             break;
 
         case '-':
             // Decrement the current cell (0 wraps to 255).
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            tape[tpptr]--;
-            strptr++;
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+                        dumpState(data1);
+
+            data1.tape[data1.tpptr]--;
+            data1.strptr++;
 
             break;
 
         case '>':
             // Move the data pointer right. Running past the last cell is
             // caught at the top of the next iteration.
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            tpptr++;
-            strptr++;
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+                        dumpState(data1);
+
+            data1.tpptr++;
+            data1.strptr++;
 
             break;
 
@@ -333,21 +382,24 @@ int main(int argc, char *argv[])
             //              program carries on with the wrong cell. Decide
             //              whether this should stop with an error instead, to
             //              match the right end.
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            if (tpptr == 0)
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+                        dumpState(data1);
+
+            if (data1.tpptr == 0)
             {
-                cout << "[DEBUG] Not moving tpptr , or else tpptr will go in negative " << endl;
-                // NOTE: strptr must advance even though tpptr does not move.
-                strptr++;
+                cout << "[DEBUG] Not moving data1.tpptr , or else data1.tpptr will go in negative " << endl;
+                // NOTE: data1.strptr must advance even though data1.tpptr does not move.
+                data1.strptr++;
                 break;
             }
-            tpptr--;
-            strptr++;
+            data1.tpptr--;
+            data1.strptr++;
 
             break;
 
@@ -356,54 +408,69 @@ int main(int argc, char *argv[])
             // TODO(BUG-4): the label and the trace are mixed into the program's
             //              output. A Brainfuck program should print only the
             //              character itself.
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            cout << " Content in the Cell : " << tape[tpptr] << endl;
-            strptr++;
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+                        dumpState(data1);
+                        
+
+                        // Handle this printing later 
+            cout << " Content in the Cell : " << data1.tape[data1.tpptr] << endl;
+            data1.strptr++;
 
             break;
 
         case ',':
             // Read one character into the current cell.
             // TODO(T-10): not implemented; the instruction is skipped.
-            encWrt(rdTxt[strptr]);
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            strptr++;
+            encWrt(data1.rdtxt[data1.strptr]);
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+                        dumpState(data1);
+
+            data1.strptr++;
 
             break;
 
         case '[':
             // Zero cell: skip the loop by jumping just past the matching ']'.
             // Nonzero cell: enter the loop body.
-            // NOTE: the lookup key is strptr (position in the program text),
-            // not tpptr (position on the tape).
-            encWrt(rdTxt[strptr]);
+            // NOTE: the lookup key is data1.strptr (position in the program text),
+            // not data1.tpptr (position on the tape).
+            encWrt(data1.rdtxt[data1.strptr]);
 
-            if (tape[tpptr] == 0)
+            if (data1.tape[data1.tpptr] == 0)
             {
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                     << endl;
-                strptr = positions[strptr] + 1;
+                // cout << "Dump State : Tape ptr : " << data1.tpptr
+                //      << " String ptr : " << data1.strptr
+                //      << " Tape content : " << (int)tape[data1.tpptr]
+                //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+                //      << endl;
+
+                            dumpState(data1);
+
+                data1.strptr = positions[data1.strptr] + 1;
             }
             else
             {
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                     << endl;
-                strptr++;
+                // cout << "Dump State : Tape ptr : " << data1.tpptr
+                //      << " String ptr : " << data1.strptr
+                //      << " Tape content : " << (int)tape[data1.tpptr]
+                //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+                //      << endl;
+
+
+                            dumpState(data1);
+
+                data1.strptr++;
             }
 
             break;
@@ -413,47 +480,60 @@ int main(int argc, char *argv[])
             // Zero cell: leave the loop.
             // NOTE: the jump target is read from revpos and 1 is added to the
             // value; the stored entry is not modified.
-            encWrt(rdTxt[strptr]);
-            if (tape[tpptr] != 0)
+            encWrt(data1.rdtxt[data1.strptr]);
+            if (data1.tape[data1.tpptr] != 0)
             {
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                     << endl;
-                strptr = revpos[strptr] + 1;
+                // cout << "Dump State : Tape ptr : " << data1.tpptr
+                //      << " String ptr : " << data1.strptr
+                //      << " Tape content : " << (int)tape[data1.tpptr]
+                //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+                //      << endl;
+
+                            dumpState(data1);
+
+                data1.strptr = revpos[data1.strptr] + 1;
             }
             else
             {
-                cout << "Dump State : Tape ptr : " << tpptr
-                     << " String ptr : " << strptr
-                     << " Tape content : " << (int)tape[tpptr]
-                     << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                     << endl;
-                strptr++;
+                // cout << "Dump State : Tape ptr : " << data1.tpptr
+                //      << " String ptr : " << data1.strptr
+                //      << " Tape content : " << (int)tape[data1.tpptr]
+                //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+                //      << endl;
+
+
+                            dumpState(data1);
+
+                data1.strptr++;
             }
 
             break;
 
         default:
             // Any other character is a comment and is skipped.
-            cout << "Dump State : Tape ptr : " << tpptr
-                 << " String ptr : " << strptr
-                 << " Tape content : " << (int)tape[tpptr]
-                 << " String Content : " << (int)(unsigned char)rdTxt[strptr]
-                 << endl;
-            strptr++;
+            // cout << "Dump State : Tape ptr : " << data1.tpptr
+            //      << " String ptr : " << data1.strptr
+            //      << " Tape content : " << (int)tape[data1.tpptr]
+            //      << " String Content : " << (int)(unsigned char)rdTxt[data1.strptr]
+            //      << endl;
+
+
+                        dumpState(data1);
+
+            data1.strptr++;
             cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
 
 
             // debug liines ( remove after checks )
 
-            // cout << " Char at default " << rdTxt[strptr] << endl;
+            // cout << " Char at default " << rdTxt[data1.strptr] << endl;
 
             // check for non-brainfuck characters 
-            if(rdTxt[strptr] != '\t' || rdTxt[strptr] != '\n' || rdTxt[strptr] != '\0'){
+
+            // UNRESOLVED BUG  STILL NEEDS TO BE FIXED 
+            if(data1.rdtxt[data1.strptr] != '\t' || data1.rdtxt[data1.strptr] != '\n' || data1.rdtxt[data1.strptr] != '\0'){
                 
-                cout << "[ERROR] Unsupported Character : " << rdTxt[strptr] << endl;
+                cout << "[ERROR] Unsupported Character : " << data1.rdtxt[data1.strptr] << endl;
                 exit(1);
             }
         }
