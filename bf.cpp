@@ -25,9 +25,9 @@ using namespace std;
 // Design notes
 // -----------------------------------------------------------------------------
 //
-// Machine model (these are fields of struct Details)
-//   strptr  index of the next instruction in the program text (program counter)
-//   tpptr   index of the current cell on the tape (data pointer)
+// Machine model (these are fields of struct MachineState)
+//   pc  index of the next instruction in the program text (program counter)
+//   data_ptr   index of the current cell on the tape (data pointer)
 //   tape    30000 unsigned 8-bit cells, all start at 0; arithmetic wraps
 //
 // Bracket jumps
@@ -62,14 +62,30 @@ using namespace std;
 //   DEC-3  exit codes (currently 1 for every failure)
 //   DEC-5  what counts as an empty program
 
+// some notes
+/*
+* we need to start using cerr , because it is a specific stream to handle all the errors and not the standard output
+
+so this is how , we can use this
+
+./main > output.txt 2> errors.txt
+
+so  , we get the output and errors seperated
+
+
+and now we will have a global variable , to check if the verbose is one
+*/
+
 // creating a struct to store the information
 
-struct Details
+bool verboseOn = false;
+
+struct MachineState
 {
     /* data */
-    int strptr = 0;
-    int tpptr = 0;
-    string rdtxt;
+    int pc = 0;       // changed strptr as pc
+    int data_ptr = 0; // changed data_ptr as dp ( data pointer )
+    string program;   // changed program to program , bcz it is the source code
     unsigned char tape[30000] = {0};
 };
 
@@ -78,21 +94,24 @@ struct Details
 // -----------------------------------------------------------------------------
 
 // Trace: announces the instruction being executed.
-void encWrt(char c)
+void traceInstruction(char c)
+// changed the function name for better readibility
 {
-    cout << "Encountered " << c << endl;
+    if (verboseOn)
+        cout << "Encountered " << c << endl;
 }
 
 // Trace: prints the machine state for the current instruction.
-// TODO(T-1): implement. Plan: put tape, tpptr and strptr (and decide about the
+// TODO(T-1): implement. Plan: put tape, data_ptr and pc (and decide about the
 //            program text, DEC-7) in one struct and take it by const reference.
-void dumpState(const Details &data)
+void dumpState(const MachineState &data)
 {
-    cout << "Dump State : Tape ptr : " << data.tpptr
-         << " String ptr : " << data.strptr
-         << " Tape content : " << (int)data.tape[data.tpptr]
-         << " String Content : " << (int)(unsigned char)data.rdtxt[data.strptr]
-         << endl;
+    if (verboseOn)
+        cout << "Dump State : Tape ptr : " << data.data_ptr
+             << " String ptr : " << data.pc
+             << " Tape content : " << (int)data.tape[data.data_ptr]
+             << " String Content : " << (int)(unsigned char)data.program[data.pc]
+             << endl;
 }
 
 // Checks that every bracket in `str` is matched and records each pair in
@@ -108,7 +127,9 @@ void dumpState(const Details &data)
 //                fix the spelling of "parentheses".
 // TODO(BUG-2): error messages go to cout; they belong on cerr.
 // TODO(Q-9): decide whether a helper should be allowed to call exit().
-void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
+
+// change the function name , so that it is easy to map things out
+void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
 {
     stack<int> stk;
     for (int i = 0; i < str.size(); i++)
@@ -117,7 +138,9 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
         {
             stk.push(i);
             // TODO(CLEAN-1): check whether this continue is needed.
-            continue;
+            // this continue is not  required because , we will anyhow come out of this as soon as it is done
+            // but it needs a check though
+            // continue;
         }
         if (str[i] == ']')
         {
@@ -132,7 +155,7 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
             }
 
             // A ']' with no open '['.
-            cout << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
+            cerr << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
             // Exit status 0 means success, so a failure must exit nonzero.
             exit(1);
             // TODO: unreachable after exit(); remove.
@@ -143,7 +166,7 @@ void computerPos(string &str, unordered_map<int, int> &pos, unordered_map<int, i
     // Anything left on the stack is a '[' that was never closed.
     if (!stk.empty())
     {
-        cout << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
+        cerr << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
         exit(1);
         // TODO: unreachable after exit(); remove.
         return;
@@ -164,10 +187,15 @@ int main(int argc, char *argv[])
 {
 
     // init the struct
-    Details data1;
+    MachineState machine;
 
     // TODO(CLEAN-7): this is an interpreter, not a compiler.
-    cout << "This is a brainfuck compiler!" << endl;
+    if (verboseOn)
+        cout << "This is a brainfuck compiler!" << endl;
+
+    // debug verbose
+    if (verboseOn)
+        cout << "This is verbose flag : " << verboseOn << endl;
 
     // ---- Machine state ----
 
@@ -178,18 +206,18 @@ int main(int argc, char *argv[])
     // fixed this tape into the struct
     // unsigned char tape[30000] = {0};
 
-    // Jump tables, filled in by computerPos (see "Jump tables" above).
+    // Jump tables, filled in by matchBrackets (see "Jump tables" above).
     unordered_map<int, int> positions;
     unordered_map<int, int> revpos;
 
     // Indices, not real pointers.
-    // tpptr: current cell on the tape
-    data1.tpptr = 0;
-    // strptr: next instruction in the program text
-    data1.strptr = 0;
+    // data_ptr: current cell on the tape
+    machine.data_ptr = 0;
+    // pc: next instruction in the program text
+    machine.pc = 0;
 
-    // rdLine: the line just read. rdTxt: the whole program, lines concatenated.
-    string rdLine, rdTxt;
+    // rdLine: the line just read. program: the whole program, lines concatenated.
+    string rdLine;
 
     // ---- 1. Command line ----
 
@@ -197,14 +225,18 @@ int main(int argc, char *argv[])
 
     // Debug: print the arguments.
     // TODO(T-2): move behind the verbose flag.
-    cout << " \n Number of  cmd line args : " << argc << endl;
+
+    if (verboseOn)
+        cout << " \n Number of  cmd line args : " << argc << endl;
 
     // we need to check if we even have the file name in the command
     if (argc < 2)
     {
-        cout << "\n[ERROR] Command requires input file as a parameter !!\n";
+        cerr << "\n[ERROR] Command requires input file as a parameter !!\n";
         exit(1);
     }
+
+    // we will consider the string at index 2 , as the verbose flag
 
     // decisions to make
     // are we handling multiple files as of now ?
@@ -212,9 +244,24 @@ int main(int argc, char *argv[])
     // will add verbose flag and some other command line args
     // to make the overall program robust
 
+    // issue , this never really runs
+    // why ?
+    // argv[i] is a char*, and "--verbose" is a const char*. What does == compare for two pointers: the characters, or the addresses?
+
+    // fixing one more rule , the first paramater after the execute cmd will be file name , verbose can come anywhere after that 
+    // this is what I am decidign at this point 
     for (int i = 0; i < argc; i++)
     {
-        cout << "Arguement " << i << " : " << argv[i] << endl;
+        if (verboseOn)
+            cout << "Arguement " << i << " : " << argv[i] << endl;
+        string verbose = "--verbose";
+        string arguement = argv[i];
+        if (arguement == verbose)
+        {
+            verboseOn = true;
+            cout << "\n Verbose is turned on !!" << endl;
+        }
+        // print out the trace
     }
 
     // argv[1] is the path of the Brainfuck program.
@@ -223,6 +270,10 @@ int main(int argc, char *argv[])
     //              failure. Also decide what to do with extra arguments (DEC-8).
     input_file_name = argv[1];
 
+    // if(verboseOn){
+    //     clog << "\nVerbose On" << endl;
+    // }
+
     // ---- 2. Read the program ----
 
     ifstream file(input_file_name);
@@ -230,7 +281,7 @@ int main(int argc, char *argv[])
     // The file could not be opened (missing, no permission, ...).
     if (!file.is_open())
     {
-        cout << "\n[ERROR] Error in opening file !! or File does not exist !! \n";
+        cerr << "\n[ERROR] Error in opening file !! or File does not exist !! \n";
         exit(1);
     }
 
@@ -240,24 +291,29 @@ int main(int argc, char *argv[])
     //              Decide what counts as empty (DEC-5) and check after reading.
     if (file.peek() == EOF)
     {
-        cout << "\n[ERROR] There are no contents in this file !! \n";
+        cerr << "\n[ERROR] There are no contents in this file !! \n";
         exit(1);
     }
 
     // Read line by line and concatenate.
-    // NOTE: rdLine is separate from rdTxt because the final, failing getline
-    // call clears the string it reads into; reading straight into rdTxt would
+    // NOTE: rdLine is separate from program because the final, failing getline
+    // call clears the string it reads into; reading straight into program would
     // leave it empty.
     // NOTE: concatenating loses line and column information (DEC-6, T-11).
     while (getline(file, rdLine))
     {
-        cout << " The text in the file : " << rdLine << endl;
-        rdTxt.append(rdLine);
-        cout << "[APPEND LOGS] After appending , we have this content : " << rdTxt << endl;
+        if (verboseOn)
+            cout << " The text in the file : " << rdLine << endl;
+
+        machine.program.append(rdLine);
+
+        if (verboseOn)
+            cout << "[APPEND LOGS] After appending , we have this content : " << machine.program << endl;
     }
 
-    // copy the rdtxt
-    data1.rdtxt = rdTxt;
+    // copy the program
+    // directly append to the struct
+    // machine.program = program;
 
     // The program is in memory, so the file is no longer needed.
     // (The ifstream would also close itself at the end of main.)
@@ -265,36 +321,41 @@ int main(int argc, char *argv[])
 
     // ---- 3. Validate brackets and build the jump tables ----
 
-    computerPos(rdTxt, positions, revpos);
+    matchBrackets(machine.program, positions, revpos);
 
     // Debug: print the jump tables.
     // TODO(T-2): move behind the verbose flag.
-    cout << "Contents of Forward Map " << endl;
-    for (const auto &pair : positions)
-    {
-        cout << pair.first << ": " << pair.second << "\n";
-    }
 
-    cout << "Contents of Backward Map " << endl;
-    for (const auto &pair : revpos)
+    if (verboseOn)
     {
-        cout << pair.first << ": " << pair.second << "\n";
+        cout << "Contents of Forward Map " << endl;
+        for (const auto &pair : positions)
+        {
+            cout << pair.first << ": " << pair.second << "\n";
+        }
+
+        cout << "Contents of Backward Map " << endl;
+        for (const auto &pair : revpos)
+        {
+            cout << pair.first << ": " << pair.second << "\n";
+        }
     }
 
     // ---- 4. Execute ----
 
-    cout << "We will process the bf pl here " << endl;
+    if (verboseOn)
+        cout << "We will process the bf pl here " << endl;
 
-    // Rule for every case below: strptr must advance or jump, otherwise the
-    // same instruction repeats forever. tpptr changes only on '>' and '<'.
-    // '[' and ']' may also change strptr (jumps).
+    // Rule for every case below: pc must advance or jump, otherwise the
+    // same instruction repeats forever. data_ptr changes only on '>' and '<'.
+    // '[' and ']' may also change pc (jumps).
 
     // Iteration counter, for the trace only.
     int cnt = 0;
 
     // TODO(CLEAN-4): int vs size_t comparison.
     // TODO(T-4): add a step limit so a runaway loop cannot hang the program.
-    while (data1.strptr < data1.rdtxt.length())
+    while (machine.pc < machine.program.length())
     {
         // Stop when the tape pointer has run off the right end. Checked at the
         // top of the iteration, before any cell is accessed. This break is
@@ -302,51 +363,56 @@ int main(int argc, char *argv[])
         // TODO(BUG-2): the program then ends with `return 0` (success) and
         //              reports on cout. It should fail with a nonzero status
         //              and report on cerr.
-        if (data1.tpptr == 30000)
+        if (machine.data_ptr == 30000)
         {
-            cout << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
+            cerr << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
             // here I am breaking the loop , but I need to exit the program , so I will use exit code
             // break;
             // exit here because of tape bounds overflow
             exit(1);
         }
 
-        cout << "------------------------------------------------" << endl;
-        cout << "Iteration : " << cnt++ << endl;
+        if (verboseOn)
+        {
 
-        cout << " char : " << data1.rdtxt[data1.strptr] << endl;
-        switch (data1.rdtxt[data1.strptr])
+            cout << "------------------------------------------------" << endl;
+            cout << "Iteration : " << cnt++ << endl;
+            cout << " char : " << machine.program[machine.pc] << endl;
+        }
+
+        switch (machine.program[machine.pc])
         {
         case '+':
             // Increment the current cell (255 wraps to 0).
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
-            data1.tape[data1.tpptr]++;
-            data1.strptr++;
+            traceInstruction(machine.program[machine.pc]);
+            dumpState(machine);
+
+            machine.tape[machine.data_ptr]++;
+            machine.pc++;
 
             break;
 
         case '-':
             // Decrement the current cell (0 wraps to 255).
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
+            traceInstruction(machine.program[machine.pc]);
+            dumpState(machine);
 
-            data1.tape[data1.tpptr]--;
-            data1.strptr++;
+            machine.tape[machine.data_ptr]--;
+            machine.pc++;
 
             break;
 
         case '>':
             // Move the data pointer right. Running past the last cell is
             // caught at the top of the next iteration.
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
+            traceInstruction(machine.program[machine.pc]);
+            dumpState(machine);
 
-            data1.tpptr++;
-            data1.strptr++;
+            machine.data_ptr++;
+            machine.pc++;
 
             break;
 
@@ -356,19 +422,20 @@ int main(int argc, char *argv[])
             //              program carries on with the wrong cell. Decide
             //              whether this should stop with an error instead, to
             //              match the right end.
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
+            traceInstruction(machine.program[machine.pc]);
 
-            if (data1.tpptr == 0)
+            dumpState(machine);
+
+            if (machine.data_ptr == 0)
             {
-                cout << "[DEBUG] Not moving tpptr , or else tpptr will go in negative " << endl;
-                // NOTE: strptr must advance even though tpptr does not move.
-                data1.strptr++;
+                cout << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
+                // NOTE: pc must advance even though data_ptr does not move.
+                machine.pc++;
                 break;
             }
-            data1.tpptr--;
-            data1.strptr++;
+            machine.data_ptr--;
+            machine.pc++;
 
             break;
 
@@ -377,47 +444,51 @@ int main(int argc, char *argv[])
             // TODO(BUG-4): the label and the trace are mixed into the program's
             //              output. A Brainfuck program should print only the
             //              character itself.
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
+            traceInstruction(machine.program[machine.pc]);
+            dumpState(machine);
 
             // Handle this printing later
-            cout << " Content in the Cell : " << data1.tape[data1.tpptr] << endl;
-            data1.strptr++;
+            // The final output
+            // as of this fix , from now onward , we will only print , nothing else on the screen
+            // cout << " Content in the Cell : " << machine.tape[machine.data_ptr] << endl;
+            cout << machine.tape[machine.data_ptr] << endl;
+
+            machine.pc++;
 
             break;
 
         case ',':
             // Read one character into the current cell.
             // TODO(T-10): not implemented; the instruction is skipped.
-            encWrt(data1.rdtxt[data1.strptr]);
 
-            dumpState(data1);
+            traceInstruction(machine.program[machine.pc]);
+            dumpState(machine);
 
-            data1.strptr++;
+            machine.pc++;
 
             break;
 
         case '[':
             // Zero cell: skip the loop by jumping just past the matching ']'.
             // Nonzero cell: enter the loop body.
-            // NOTE: the lookup key is strptr (position in the program text),
-            // not tpptr (position on the tape).
-            encWrt(data1.rdtxt[data1.strptr]);
+            // NOTE: the lookup key is pc (position in the program text),
+            // not data_ptr (position on the tape).
 
-            if (data1.tape[data1.tpptr] == 0)
+            traceInstruction(machine.program[machine.pc]);
+
+            if (machine.tape[machine.data_ptr] == 0)
             {
 
-                dumpState(data1);
+                dumpState(machine);
 
-                data1.strptr = positions[data1.strptr] + 1;
+                machine.pc = positions[machine.pc] + 1;
             }
             else
             {
+                dumpState(machine);
 
-                dumpState(data1);
-
-                data1.strptr++;
+                machine.pc++;
             }
 
             break;
@@ -427,20 +498,19 @@ int main(int argc, char *argv[])
             // Zero cell: leave the loop.
             // NOTE: the jump target is read from revpos and 1 is added to the
             // value; the stored entry is not modified.
-            encWrt(data1.rdtxt[data1.strptr]);
-            if (data1.tape[data1.tpptr] != 0)
+            traceInstruction(machine.program[machine.pc]);
+            if (machine.tape[machine.data_ptr] != 0)
             {
 
-                dumpState(data1);
+                dumpState(machine);
 
-                data1.strptr = revpos[data1.strptr] + 1;
+                machine.pc = revpos[machine.pc] + 1;
             }
             else
             {
+                dumpState(machine);
 
-                dumpState(data1);
-
-                data1.strptr++;
+                machine.pc++;
             }
 
             break;
@@ -448,26 +518,45 @@ int main(int argc, char *argv[])
         default:
             // Any other character is a comment and is skipped.
 
-            dumpState(data1);
-
-            data1.strptr++;
+            dumpState(machine);
             cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
+
+            machine.pc++;
 
             // debug liines ( remove after checks )
 
-            // cout << " Char at default " << rdTxt[strptr] << endl;
+            // cout << " Char at default " << program[pc] << endl;
 
             // check for non-brainfuck characters
 
+            // but later I can implement a strict version of  it , where I will reject unwanted character
             // UNRESOLVED BUG  STILL NEEDS TO BE FIXED
-            if (data1.rdtxt[data1.strptr] != '\t' || data1.rdtxt[data1.strptr] != '\n' || data1.rdtxt[data1.strptr] != '\0')
-            {
+            // if we use AND, so whenever we hit something , I am still not understanding how this works ?
+            // here we use and , because if it is not any of tab , new line or escapre , we then skip it directly .
+            // or can we just skip everything ?
+            // what is a valid brainfuck compiler take input as ?
+            // what all errors to be reported ?
+            // so ,  in bf we just skip things , we do  not reject them
+            // if (machine.program[machine.pc] != '\t' && machine.program[machine.pc] != '\n' && machine.program[machine.pc] != '\0')
+            // {
 
-                cout << "[ERROR] Unsupported Character : " << data1.rdtxt[data1.strptr] << endl;
-                exit(1);
-            }
+            //     cout << "[ERROR] Unsupported Character : " << machine.program[machine.pc] << endl;
+
+            //     exit(1);
+            // }
         }
-        cout << "------------------------------------------------" << endl;
+        if (verboseOn)
+        {
+            clog << "------------------------------------------------" << endl;
+        }
+    }
+
+    // we will still be one index behind . so , we need to print the final trace too
+
+    if (verboseOn)
+    {
+        clog << "\n Final Dump state " << endl;
+        dumpState(machine);
     }
 
     return 0;
