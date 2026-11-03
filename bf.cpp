@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <string>
 #include <stack>
+#include <cstdlib>
 // TODO(CLEAN-5): add <cstdlib>; exit() currently arrives through another header.
 using namespace std;
 
@@ -115,6 +116,12 @@ void traceInstruction(char c)
 // TODO(REF-5): after the loop, pc == program.length(), so program[pc] is the
 //              string's terminating '\0' (legal for std::string, but not a
 //              program character). The final dump prints 0 for it.
+
+// NOTE (REF-5): after the loop pc == program.length(), so program[pc] is the
+// string's terminating '\0'. That is defined for std::string, so the final
+// dump prints 0 for "String Content", meaning "end of program".
+// TODO(REF-5): must be fixed before Stage 2; reading at size() of a vector is
+//              undefined behavior.
 void dumpState(const MachineState &data)
 {
     if (verboseOn)
@@ -218,14 +225,22 @@ int main(int argc, char *argv[])
     //             loop, on clog.
     for (int i = 2; i < argc; i++)
     {
-        if (verboseOn)
-            cout << "Arguement " << i << " : " << argv[i] << endl;
+        // cout << "DEBUG - verbose flag is accessible here " << verboseOn << endl;
+        
         string verbose = "--verbose";
         string arguement = argv[i];
+
+        clog << "This dump starts after the file name !! So only the flags will be printed  (from index 2 )" << endl;
         if (arguement == verbose)
         {
             verboseOn = true;
             clog << "\n Verbose is turned on !!" << endl;
+        }
+
+        // moved this down here , because just above this step , we set the verbose flag , so earlier verbose was not at all set 
+        if (verboseOn){
+
+            clog << "Arguement " << i << " : " << argv[i] << endl;
         }
     }
 
@@ -405,13 +420,19 @@ int main(int argc, char *argv[])
 
             if (machine.data_ptr == 0)
             {
+
+                cerr << "[ERROR] trying to move data_ptr before 0 " << endl;
+                exit(0);
                 // TODO(CLEAN-13): this message names an internal variable; word
                 //                 it for the user instead.
-                if (verboseOn)
-                    clog << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
-                // NOTE: pc must advance even though data_ptr does not move.
-                machine.pc++;
-                break;
+
+                // commenting out this as of now for fixing this 
+
+                // if (verboseOn)
+                //     clog << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
+                // // NOTE: pc must advance even though data_ptr does not move.
+                // machine.pc++;
+                // break;
             }
             machine.data_ptr--;
             machine.pc++;
@@ -528,6 +549,9 @@ int main(int argc, char *argv[])
     // writes at least "\n", even a program that prints nothing. It is not
     // written when the program exits through an error.
     // TODO(T2-7): decide whether the interpreter should add it.
-    cout << endl;
+    
+    // as of now  let us keep this commented 
+    // as I have seen even in normal compiler , it is the job of the user to get the newline , not the job of the compiler 
+    // cout << endl;
     return 0;
 }
