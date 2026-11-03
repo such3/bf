@@ -1,7 +1,7 @@
 // =============================================================================
 // bf.cpp : a Brainfuck interpreter (learning project)
 //
-// Usage:  ./bf <program.bf>
+// Usage:  ./bf <program.bf> [--verbose]
 // Build:  g++ -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined src/bf.cpp -o bf
 //
 // Status: Stage 0 (hardening). Open bugs and to-dos are in docs/TRACKER.md,
@@ -25,10 +25,11 @@ using namespace std;
 // Design notes
 // -----------------------------------------------------------------------------
 //
-// Machine model (these are fields of struct MachineState)
-//   pc  index of the next instruction in the program text (program counter)
-//   data_ptr   index of the current cell on the tape (data pointer)
-//   tape    30000 unsigned 8-bit cells, all start at 0; arithmetic wraps
+// Machine model (fields of struct MachineState)
+//   pc        index of the next instruction in the program text (program counter)
+//   data_ptr  index of the current cell on the tape (data pointer)
+//   tape      30000 unsigned 8-bit cells, all start at 0; arithmetic wraps
+//   program   the Brainfuck source text, all lines concatenated
 //
 // Bracket jumps
 //   Both '[' and ']' land one position AFTER the matching bracket.
@@ -45,47 +46,52 @@ using namespace std;
 //     revpos[j]    = index of the '[' matching the ']' at j
 //   TODO(T-6): replace the two maps with one compact table.
 //
+// Output streams
+//   cout  the program's own output only (the bytes written by '.')
+//   cerr  errors
+//   clog  the trace, printed only with --verbose
+//   Redirect them separately:  ./bf prog.bf > out.txt 2> err.txt
+//   NOTE: clog and cerr both write to stderr, but cerr is tied to cout (cout is
+//   flushed before each cerr write) and clog is not. With the trace on clog,
+//   the program's own output can therefore appear after the trace in a
+//   terminal. See DEC-12.
+//
 // Trace output
-//   Every instruction prints a state dump. Two casts keep it readable:
-//     - A tape cell is an unsigned char, which cout prints as a character.
+//   With --verbose every instruction prints a state dump. Two casts keep it
+//   readable:
+//     - A tape cell is an unsigned char, which a stream prints as a character.
 //       Cast to int to print its numeric value.
 //     - A program character is cast through unsigned char first, so bytes
 //       above 127 do not turn into negative numbers.
-//   TODO(T-1): the dump is copy-pasted into every case; move it into dumpState().
-//   TODO(T-2): put the trace behind a verbose flag and keep it separate from
-//              the program's own output.
 //   TODO(Q-2): finish understanding the unsigned representation and printing
 //              characters by their integer value.
 //
-// Open policy questions
-//   DEC-1  what '<' at cell 0 should do (currently ignored, see case '<')
-//   DEC-3  exit codes (currently 1 for every failure)
-//   DEC-5  what counts as an empty program
+// Policy decisions
+//   DEC-1   '<' at cell 0 is currently ignored (open; see case '<')
+//   DEC-3   every failure exits with status 1 (decided for now)
+//   DEC-5   files with only whitespace or only comments are valid programs that
+//           do nothing; a 0-byte file is an error (decided for now)
+//   DEC-8   unknown flags and extra arguments are silently ignored (open)
+//   DEC-9   characters that are not commands are skipped as comments (decided)
+//   DEC-11  verbose is a global flag, not part of an options struct (decided
+//           for now)
 
-// some notes
-/*
-* we need to start using cerr , because it is a specific stream to handle all the errors and not the standard output
+// -----------------------------------------------------------------------------
+// Machine state
+// -----------------------------------------------------------------------------
 
-so this is how , we can use this
-
-./main > output.txt 2> errors.txt
-
-so  , we get the output and errors seperated
-
-
-and now we will have a global variable , to check if the verbose is one
-*/
-
-// creating a struct to store the information
-
+// Set while parsing the command line. Every trace function checks it itself,
+// so callers cannot forget to.
+// TODO(DEC-11): revisit when more flags exist (an options struct, Stage 1).
 bool verboseOn = false;
 
+// Everything that changes while a program runs, plus the program text.
+// TODO(DEC-7): the text moves out of the machine state in Stage 2 (the IR).
 struct MachineState
 {
-    /* data */
-    int pc = 0;       // changed strptr as pc
-    int data_ptr = 0; // changed data_ptr as dp ( data pointer )
-    string program;   // changed program to program , bcz it is the source code
+    int pc = 0;       // next instruction, an index into `program`
+    int data_ptr = 0; // current cell, an index into `tape`
+    string program;   // the Brainfuck source text
     unsigned char tape[30000] = {0};
 };
 
@@ -93,42 +99,44 @@ struct MachineState
 // Helpers
 // -----------------------------------------------------------------------------
 
-// Trace: announces the instruction being executed.
+// Trace (verbose only, on clog): the instruction about to run.
 void traceInstruction(char c)
-// changed the function name for better readibility
 {
     if (verboseOn)
-        cout << "Encountered " << c << endl;
+        clog << "Encountered " << c << endl;
 }
 
-// Trace: prints the machine state for the current instruction.
-// TODO(T-1): implement. Plan: put tape, data_ptr and pc (and decide about the
-//            program text, DEC-7) in one struct and take it by const reference.
+// Trace (verbose only, on clog): pc, data_ptr, the current cell and the
+// character at pc. Called before the instruction runs, so it shows the state
+// that instruction sees.
+// NOTE: the verbose check is inside the function so no caller can forget it.
+// It costs one load and one well-predicted branch per call; measure it in
+// Stage 4 rather than guess.
+// TODO(REF-5): after the loop, pc == program.length(), so program[pc] is the
+//              string's terminating '\0' (legal for std::string, but not a
+//              program character). The final dump prints 0 for it.
 void dumpState(const MachineState &data)
 {
     if (verboseOn)
-        cout << "Dump State : Tape ptr : " << data.data_ptr
+        clog << "Dump State : Tape ptr : " << data.data_ptr
              << " String ptr : " << data.pc
              << " Tape content : " << (int)data.tape[data.data_ptr]
              << " String Content : " << (int)(unsigned char)data.program[data.pc]
              << endl;
 }
 
-// Checks that every bracket in `str` is matched and records each pair in
-// `pos` and `rpos` (see "Jump tables" above).
+// Checks that every bracket in `str` is matched and records each pair in `pos`
+// and `rpos` (see "Jump tables" above).
 //
 // A stack handles nesting: each ']' pairs with the innermost open '['.
-// An unmatched bracket prints an error and exits with status 1.
+// An unmatched bracket prints an error on cerr and exits with status 1.
 // Example of an invalid program: ++++[*-***-*>**>]]   (the last ']' has no '[')
 //
-// TODO(CLEAN-3): rename to computePos; take `const string &str`.
+// TODO(CLEAN-3): take `const string &str`; it is only read.
 // TODO(CLEAN-4): compare with size_t instead of int in the loop.
 // TODO(CLEAN-2): include the index of the offending bracket in the messages and
-//                fix the spelling of "parentheses".
-// TODO(BUG-2): error messages go to cout; they belong on cerr.
+//                fix the spelling of "parentheses" in them.
 // TODO(Q-9): decide whether a helper should be allowed to call exit().
-
-// change the function name , so that it is easy to map things out
 void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
 {
     stack<int> stk;
@@ -137,10 +145,8 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
         if (str[i] == '[')
         {
             stk.push(i);
-            // TODO(CLEAN-1): check whether this continue is needed.
-            // this continue is not  required because , we will anyhow come out of this as soon as it is done
-            // but it needs a check though
-            // continue;
+            // NOTE: no `continue` is needed here. The next `if` tests for ']',
+            // which is false for a '[', so nothing else happens this iteration.
         }
         if (str[i] == ']')
         {
@@ -154,11 +160,11 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
                 continue;
             }
 
-            // A ']' with no open '['.
+            // A ']' with no open '['. Exit status 0 means success, so a
+            // failure must exit nonzero.
             cerr << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
-            // Exit status 0 means success, so a failure must exit nonzero.
             exit(1);
-            // TODO: unreachable after exit(); remove.
+            // TODO(CLEAN-12): unreachable after exit(); remove.
             return;
         }
     }
@@ -168,7 +174,7 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
     {
         cerr << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
         exit(1);
-        // TODO: unreachable after exit(); remove.
+        // TODO(CLEAN-12): unreachable after exit(); remove.
         return;
     }
 }
@@ -182,75 +188,35 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
 // -----------------------------------------------------------------------------
 
 // argc counts the arguments including the program name:
-//   ./bf prog.bf   ->   argc = 2, argv[0] = "./bf", argv[1] = "prog.bf"
+//   ./bf prog.bf --verbose   ->   argc = 3
+//   argv[0] = "./bf", argv[1] = "prog.bf", argv[2] = "--verbose"
 int main(int argc, char *argv[])
 {
-
-    // init the struct
+    // pc, data_ptr and tape start at their default values (0, 0, all zeros).
     MachineState machine;
-
-    // TODO(CLEAN-7): this is an interpreter, not a compiler.
-    if (verboseOn)
-        cout << "This is a brainfuck compiler!" << endl;
-
-    // debug verbose
-    if (verboseOn)
-        cout << "This is verbose flag : " << verboseOn << endl;
-
-    // ---- Machine state ----
-
-    // The tape: 30000 cells, zero-initialised, 8-bit unsigned so arithmetic wraps.
-    // Pointer policy: past the right end stops the program with [OVERFLOW];
-    // at the left end the move is ignored (DEC-1, DEC-2).
-
-    // fixed this tape into the struct
-    // unsigned char tape[30000] = {0};
-
-    // Jump tables, filled in by matchBrackets (see "Jump tables" above).
-    unordered_map<int, int> positions;
-    unordered_map<int, int> revpos;
-
-    // Indices, not real pointers.
-    // data_ptr: current cell on the tape
-    machine.data_ptr = 0;
-    // pc: next instruction in the program text
-    machine.pc = 0;
-
-    // rdLine: the line just read. program: the whole program, lines concatenated.
-    string rdLine;
 
     // ---- 1. Command line ----
 
-    string input_file_name;
-
-    // Debug: print the arguments.
-    // TODO(T-2): move behind the verbose flag.
-
-    if (verboseOn)
-        cout << " \n Number of  cmd line args : " << argc << endl;
-
-    // we need to check if we even have the file name in the command
+    // The first argument is always the program path; flags may follow it.
+    // A path is required.
     if (argc < 2)
     {
         cerr << "\n[ERROR] Command requires input file as a parameter !!\n";
         exit(1);
     }
 
-    // we will consider the string at index 2 , as the verbose flag
-
-    // decisions to make
-    // are we handling multiple files as of now ?
-    // in version 1 , we will just use single input
-    // will add verbose flag and some other command line args
-    // to make the overall program robust
-
-    // issue , this never really runs
-    // why ?
-    // argv[i] is a char*, and "--verbose" is a const char*. What does == compare for two pointers: the characters, or the addresses?
-
-    // fixing one more rule , the first paramater after the execute cmd will be file name , verbose can come anywhere after that 
-    // this is what I am decidign at this point 
-    for (int i = 0; i < argc; i++)
+    // Scan for flags. The loop starts at 2 because argv[0] is the program name
+    // and argv[1] is the path. Flags are parsed before any code that prints
+    // trace output, because those prints depend on verboseOn.
+    // NOTE: argv[i] is a char*, and == on two char* compares addresses, not
+    // text. The std::string copy makes the comparison compare the characters.
+    // TODO(DEC-8): unknown flags and extra arguments are silently ignored.
+    // TODO(T2-6): this dump runs before the flag check in the same iteration,
+    //             so it only prints arguments that come after --verbose (never
+    //             the flag itself), and it writes to cout, which is the
+    //             program's own output. Print all arguments once, after the
+    //             loop, on clog.
+    for (int i = 2; i < argc; i++)
     {
         if (verboseOn)
             cout << "Arguement " << i << " : " << argv[i] << endl;
@@ -259,22 +225,45 @@ int main(int argc, char *argv[])
         if (arguement == verbose)
         {
             verboseOn = true;
-            cout << "\n Verbose is turned on !!" << endl;
+            clog << "\n Verbose is turned on !!" << endl;
         }
-        // print out the trace
     }
 
-    // argv[1] is the path of the Brainfuck program.
-    // TODO(BUG-5): argc is never checked. Running ./bf with no arguments reads a
-    //              null pointer here. Print a usage message and exit with
-    //              failure. Also decide what to do with extra arguments (DEC-8).
-    input_file_name = argv[1];
+    // Trace: startup information (verbose only).
+    if (verboseOn)
+        clog << " \n Number of  cmd line args : " << argc << endl;
 
-    // if(verboseOn){
-    //     clog << "\nVerbose On" << endl;
-    // }
+    // TODO(CLEAN-7): this is an interpreter, not a compiler.
+    if (verboseOn)
+        clog << "This is a brainfuck compiler!" << endl;
+
+    if (verboseOn)
+        clog << "This is verbose flag : " << verboseOn << endl;
+
+    // ---- Working variables ----
+
+    // Jump tables, filled in by matchBrackets (see "Jump tables" above).
+    unordered_map<int, int> positions;
+    unordered_map<int, int> revpos;
+
+    // The struct's default member initializers already set both to 0, so these
+    // two assignments repeat that.
+    // TODO(Q-13): decide whether they should stay.
+    machine.data_ptr = 0;
+    machine.pc = 0;
+
+    // The line just read. The whole program accumulates in machine.program.
+    string rdLine;
+
+    string input_file_name;
 
     // ---- 2. Read the program ----
+
+    // argv[1] is the path of the Brainfuck program (argc >= 2 was checked above).
+    // TODO(T2-5): the error messages below do not say which path failed, and
+    //             the "Number of cmd line args" trace is the only place the
+    //             path is ever shown.
+    input_file_name = argv[1];
 
     ifstream file(input_file_name);
 
@@ -285,10 +274,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    // The file is empty.
-    // TODO(BUG-6): peek() only catches a 0-byte file. A file with only
-    //              whitespace, or with no Brainfuck commands, passes this check.
-    //              Decide what counts as empty (DEC-5) and check after reading.
+    // A 0-byte file is an error. A file with only whitespace or only comments
+    // is a valid program that does nothing, and exits with status 0 (DEC-5).
+    // TODO(DEC-5): confirm that a 0-byte file should stay an error.
     if (file.peek() == EOF)
     {
         cerr << "\n[ERROR] There are no contents in this file !! \n";
@@ -296,24 +284,20 @@ int main(int argc, char *argv[])
     }
 
     // Read line by line and concatenate.
-    // NOTE: rdLine is separate from program because the final, failing getline
-    // call clears the string it reads into; reading straight into program would
-    // leave it empty.
+    // NOTE: rdLine is separate from machine.program because the final, failing
+    // getline call clears the string it reads into; reading straight into
+    // machine.program would leave it empty.
     // NOTE: concatenating loses line and column information (DEC-6, T-11).
     while (getline(file, rdLine))
     {
         if (verboseOn)
-            cout << " The text in the file : " << rdLine << endl;
+            clog << " The text in the file : " << rdLine << endl;
 
         machine.program.append(rdLine);
 
         if (verboseOn)
-            cout << "[APPEND LOGS] After appending , we have this content : " << machine.program << endl;
+            clog << "[APPEND LOGS] After appending , we have this content : " << machine.program << endl;
     }
-
-    // copy the program
-    // directly append to the struct
-    // machine.program = program;
 
     // The program is in memory, so the file is no longer needed.
     // (The ifstream would also close itself at the end of main.)
@@ -323,34 +307,32 @@ int main(int argc, char *argv[])
 
     matchBrackets(machine.program, positions, revpos);
 
-    // Debug: print the jump tables.
-    // TODO(T-2): move behind the verbose flag.
-
+    // Trace: the jump tables (verbose only).
     if (verboseOn)
     {
-        cout << "Contents of Forward Map " << endl;
+        clog << "Contents of Forward Map " << endl;
         for (const auto &pair : positions)
         {
-            cout << pair.first << ": " << pair.second << "\n";
+            clog << pair.first << ": " << pair.second << "\n";
         }
 
-        cout << "Contents of Backward Map " << endl;
+        clog << "Contents of Backward Map " << endl;
         for (const auto &pair : revpos)
         {
-            cout << pair.first << ": " << pair.second << "\n";
+            clog << pair.first << ": " << pair.second << "\n";
         }
     }
 
     // ---- 4. Execute ----
 
     if (verboseOn)
-        cout << "We will process the bf pl here " << endl;
+        clog << "We will process the bf pl here " << endl;
 
-    // Rule for every case below: pc must advance or jump, otherwise the
-    // same instruction repeats forever. data_ptr changes only on '>' and '<'.
+    // Rule for every case below: pc must advance or jump, otherwise the same
+    // instruction repeats forever. data_ptr changes only on '>' and '<'.
     // '[' and ']' may also change pc (jumps).
 
-    // Iteration counter, for the trace only.
+    // Iteration counter, used only by the trace (it only advances with --verbose).
     int cnt = 0;
 
     // TODO(CLEAN-4): int vs size_t comparison.
@@ -358,26 +340,20 @@ int main(int argc, char *argv[])
     while (machine.pc < machine.program.length())
     {
         // Stop when the tape pointer has run off the right end. Checked at the
-        // top of the iteration, before any cell is accessed. This break is
-        // outside the switch, so it leaves the while loop.
-        // TODO(BUG-2): the program then ends with `return 0` (success) and
-        //              reports on cout. It should fail with a nonzero status
-        //              and report on cerr.
+        // top of the iteration, before any cell is accessed. Reports on cerr
+        // and exits with status 1.
         if (machine.data_ptr == 30000)
         {
             cerr << "[OVERFLOW] Tape overflow !! You have crossed 30k cells . \n";
-            // here I am breaking the loop , but I need to exit the program , so I will use exit code
-            // break;
-            // exit here because of tape bounds overflow
             exit(1);
         }
 
+        // Trace: iteration header (verbose only).
         if (verboseOn)
         {
-
-            cout << "------------------------------------------------" << endl;
-            cout << "Iteration : " << cnt++ << endl;
-            cout << " char : " << machine.program[machine.pc] << endl;
+            clog << "------------------------------------------------" << endl;
+            clog << "Iteration : " << cnt++ << endl;
+            clog << " char : " << machine.program[machine.pc] << endl;
         }
 
         switch (machine.program[machine.pc])
@@ -429,7 +405,10 @@ int main(int argc, char *argv[])
 
             if (machine.data_ptr == 0)
             {
-                cout << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
+                // TODO(CLEAN-13): this message names an internal variable; word
+                //                 it for the user instead.
+                if (verboseOn)
+                    clog << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
                 // NOTE: pc must advance even though data_ptr does not move.
                 machine.pc++;
                 break;
@@ -440,19 +419,15 @@ int main(int argc, char *argv[])
             break;
 
         case '.':
-            // Output the current cell.
-            // TODO(BUG-4): the label and the trace are mixed into the program's
-            //              output. A Brainfuck program should print only the
-            //              character itself.
+            // Output the current cell as one raw byte on stdout: no label and
+            // no newline. The trace goes to clog.
+            // NOTE: cout is not flushed here; it is flushed at exit (or when
+            // its buffer fills). See "Output streams" for the ordering effect.
 
             traceInstruction(machine.program[machine.pc]);
             dumpState(machine);
 
-            // Handle this printing later
-            // The final output
-            // as of this fix , from now onward , we will only print , nothing else on the screen
-            // cout << " Content in the Cell : " << machine.tape[machine.data_ptr] << endl;
-            cout << machine.tape[machine.data_ptr] << endl;
+            cout << machine.tape[machine.data_ptr];
 
             machine.pc++;
 
@@ -516,48 +491,43 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            // Any other character is a comment and is skipped.
+            // Any other character is a comment and is skipped (DEC-9).
+            // TODO(T-12): an optional strict mode, behind a flag, could reject
+            //             non-command characters in a validation pass before
+            //             execution starts.
 
-            dumpState(machine);
-            cout << " Skipping other instructions such as new lines and spaces and tabs " << endl;
+            if (verboseOn)
+            {
+
+                dumpState(machine);
+                clog << " Skipping other instructions such as new lines and spaces and tabs " << endl;
+            }
 
             machine.pc++;
-
-            // debug liines ( remove after checks )
-
-            // cout << " Char at default " << program[pc] << endl;
-
-            // check for non-brainfuck characters
-
-            // but later I can implement a strict version of  it , where I will reject unwanted character
-            // UNRESOLVED BUG  STILL NEEDS TO BE FIXED
-            // if we use AND, so whenever we hit something , I am still not understanding how this works ?
-            // here we use and , because if it is not any of tab , new line or escapre , we then skip it directly .
-            // or can we just skip everything ?
-            // what is a valid brainfuck compiler take input as ?
-            // what all errors to be reported ?
-            // so ,  in bf we just skip things , we do  not reject them
-            // if (machine.program[machine.pc] != '\t' && machine.program[machine.pc] != '\n' && machine.program[machine.pc] != '\0')
-            // {
-
-            //     cout << "[ERROR] Unsupported Character : " << machine.program[machine.pc] << endl;
-
-            //     exit(1);
-            // }
         }
+        // Trace: iteration footer (verbose only).
         if (verboseOn)
         {
             clog << "------------------------------------------------" << endl;
         }
     }
 
-    // we will still be one index behind . so , we need to print the final trace too
-
+    // Trace: the state after the last instruction. The per-instruction dump
+    // runs before each instruction, so the effect of the last one is only
+    // visible here.
+    // TODO(REF-5): this dump reads one past the end of the program text (see
+    //              dumpState).
     if (verboseOn)
     {
         clog << "\n Final Dump state " << endl;
         dumpState(machine);
     }
 
+    // Prints one newline on stdout after the program finishes.
+    // NOTE: this is a byte the Brainfuck program did not output, so every run
+    // writes at least "\n", even a program that prints nothing. It is not
+    // written when the program exits through an error.
+    // TODO(T2-7): decide whether the interpreter should add it.
+    cout << endl;
     return 0;
 }
