@@ -1,124 +1,124 @@
-# bf: a Brainfuck interpreter in C++
+# Brainfuck interpreter
 
-A learning project. It starts as a plain interpreter and grows, stage by stage, into an optimizing compiler with C, assembly and LLVM backends. The goal is to understand how compilers, LLVM and computer architecture fit together by building each piece myself.
+This project is a small C++ Brainfuck interpreter built as a learning exercise in compiler construction. The implementation currently lives in [bf.cpp](bf.cpp), and the project is organized around the interpreter itself, the runner, and the design notes in [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/TRACKER.md](docs/TRACKER.md).
 
-> [!NOTE]
-> **Status:** Stage 0 of 9 (hardening the interpreter). It runs simple BF programs, but it is very chatty (a trace is printed for every instruction) and has known bugs. See [`docs/TRACKER.md`](docs/TRACKER.md).
+> Status: the interpreter is working as a file-based CLI and is in the hardening / design-cleanup phase. The code is not a finished compiler yet; it is a practical stepping stone toward understanding how interpreters, jumps, diagnostics, and later compiler backends fit together.
 
 ---
 
-## What is Brainfuck?
+## What the interpreter does
 
-A minimal language with eight commands operating on a tape of byte-sized cells and one data pointer. Every other character is a comment.
+Brainfuck is a tiny language built around a tape of byte cells and a data pointer. The current implementation supports the core instructions used by the language model:
 
 | Command | Meaning |
 |---|---|
-| `>` | Move the data pointer one cell right |
-| `<` | Move the data pointer one cell left |
+| `>` | Move the tape pointer right |
+| `<` | Move the tape pointer left |
 | `+` | Increment the current cell |
 | `-` | Decrement the current cell |
-| `.` | Output the current cell as a character |
-| `,` | Read one character into the current cell *(not implemented yet)* |
-| `[` | If the current cell is 0, jump past the matching `]` |
-| `]` | If the current cell is nonzero, jump back to just after the matching `[` |
+| `.` | Output the current cell as a byte |
+| `,` | Input one byte into the current cell *(not implemented yet)* |
+| `[` | Jump past the matching `]` if the current cell is zero |
+| `]` | Jump back to the matching `[` if the current cell is nonzero |
 
-Example: `+++++++[>++++++++++<-]>.` computes 7 × 10 = 70 in the second cell and prints it, which is ASCII `F`.
+The project follows the usual Brainfuck semantics: every other character is treated as a comment, and the source text is read as a program stream.
 
 ---
 
 ## Build and run
 
-Adjust the source path to wherever your file lives.
+From the project root:
 
 ```bash
-# Development build: warnings on, debug info, sanitizers
-g++ -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined src/bf.cpp -o bf
-
-# Run (currently reads ./input.txt from the working directory)
-./bf
+g++ -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined bf.cpp -o run
+./run input.txt
+./run input.txt --verbose
 ```
 
-Planned: take the program file from the command line (`./bf program.bf`).
+The program expects the Brainfuck source file as the first argument. The script and the executable are intentionally simple at this stage: the source file is read from disk, validated, and executed immediately.
+
+The supported optional flag is `--verbose`. Unsupported flags currently print a help message and continue processing; this is part of the current CLI behavior while the parser is still being hardened.
+
+Example:
+
+```bash
+./run input.txt --verbose
+```
+
+This prints the state trace to stderr when verbose mode is enabled and leaves the program’s own output on stdout.
+
+> Fresh verification: running `./run input.txt --ver` in the current project prints the help text and then triggers the left-bound tape error, which is consistent with the source logic in [bf.cpp](bf.cpp).
 
 ---
 
-## Current behaviour
+## Current behavior in this repo
 
-| Topic | Behaviour today |
+The current implementation is not a theoretical design document; it matches the actual code in [bf.cpp](bf.cpp):
+
+| Topic | Current behavior |
 |---|---|
-| Tape | 30000 cells, each an 8-bit unsigned value, all starting at 0 |
-| Cell arithmetic | Wraps around: `0 - 1` is 255, `255 + 1` is 0 |
-| Tape pointer past the right end | Stops with an `[OVERFLOW]` message |
-| Tape pointer past the left end | **Known bug**, see BUG-1 in the tracker |
-| Unbalanced brackets | Detected before running; prints an error |
-| Multi-line source | Lines are joined into one program |
-| Input (`,`) | Not implemented |
-| Output | Mixed with debug trace (to be separated) |
-| Exit status | **Known bug**: errors currently exit with 0 |
+| File input | Reads the Brainfuck source from a path passed on the command line |
+| Tape model | 30000 cells, each a byte-sized unsigned value, all starting at zero |
+| Cell arithmetic | Wraps around on overflow/underflow |
+| Right-bound safety | Stops with an overflow error when the tape pointer moves past the last cell |
+| Left-bound safety | Stops with an error if the pointer moves below zero |
+| Bracket validation | Checks matching `[` and `]` before execution |
+| Non-command characters | Ignored as comments |
+| `,` input | Not implemented yet |
+| Verbose tracing | Optional via `--verbose`; prints instruction and state dumps |
+| Output model | Writes raw bytes produced by `.` to stdout; the interpreter itself adds no extra newline |
+
+The current code also distinguishes output from tracing by separating stdout and stderr usage, although the implementation still uses verbose logging heavily while it is being debugged.
 
 ---
 
-## Project layout
+## Repository layout
 
+```text
+Brainfuck/
+├── bf.cpp                 C++ interpreter source
+├── run                    compiled executable produced by the build step
+├── input.txt              example Brainfuck input file
+├── README.MD              project overview and usage
+├── index.html             browser-facing prototype/demo entry point
+├── web/                   frontend assets for the browser view
+├── docs/
+│   ├── ROADMAP.md         long-term plan from interpreter to compiler stages
+│   ├── TRACKER.md         active issues, decisions, and to-dos
+│   └── reviews/           archived review notes
+├── dev-logs/              working notes and project history
+└── rules/                 language/project rules and notes
 ```
-bf-interpreter/
-├── README.md                this file
-├── src/
-│   └── bf.cpp               the interpreter
-├── tests/
-│   ├── programs/            .bf test programs
-│   ├── expected/            expected output for each program
-│   └── run_tests.sh         runs every program and diffs the output
-└── docs/
-    ├── ROADMAP.md           the long-term plan (stages 0 to 9)
-    ├── TRACKER.md           bugs, to-dos, decisions, questions, done log
-    └── reviews/
-        ├── review-01.md     first review (archived)
-        └── review-02.md     latest review
-```
-
-`tests/` does not exist yet; creating it is part of Stage 0.
 
 ---
 
 ## Documentation
 
-| Document | Use it for |
+| Document | Purpose |
 |---|---|
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Where this project is going and why |
-| [`docs/TRACKER.md`](docs/TRACKER.md) | What is broken, what is next, what was decided |
-| [`docs/reviews/`](docs/reviews/) | Dated snapshots of code reviews |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Long-term plan and compiler path |
+| [docs/TRACKER.md](docs/TRACKER.md) | Current issues, decisions, follow-up work |
+| [docs/reviews/](docs/reviews/) | Historical review snapshots |
+| [dev-logs/](dev-logs/) | Project notes and working history |
 
 ---
 
-## Roadmap at a glance
+## Roadmap in brief
 
-| Stage | Title | State |
-|---|---|---|
-| 0 | Harden the interpreter | In progress |
-| 1 | Separate load / analyze / execute | |
-| 2 | Introduce an IR | |
-| 3 | Optimize the IR | |
-| 4 | Fast interpreter, architecture lessons | |
-| 5 | Backend: emit C | |
-| 6 | Backend: assembly | |
-| 7 | Backend: LLVM IR | |
-| 8 | JIT (optional) | |
-| 9 | MLIR dialect (optional) | |
+The long-term direction is already visible in the code comments and the roadmap:
 
-Details are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+1. Harden the interpreter and fix runtime edge cases.
+2. Separate loading, validation, and execution phases.
+3. Introduce an intermediate representation.
+4. Add optimization passes.
+5. Move toward C, assembly, and LLVM-based backends.
+
+This is a compiler-learning project, not a final product. The current interpreter is the foundation for the stages that follow.
 
 ---
 
-## Testing
+## Notes
 
-Planned for Stage 0: every program in `tests/programs/` has an expected output in `tests/expected/`, and `tests/run_tests.sh` runs them all, comparing output and exit status. Later stages add differential testing (every backend must agree with the interpreter).
-
----
-
-## Learning goals
-
-- How a language implementation is structured (front end, IR, passes, back end)
-- How optimizations are expressed and proven safe
-- How code generation maps to real machines (registers, ISA, calling conventions)
-- How LLVM IR works and what the LLVM optimizer does
+- The project intentionally keeps the code readable and educational, with comments describing decisions and open follow-up work.
+- The code is structured as a learning exercise, so design comments and TODO markers are part of the source itself.
+- The current status is intentionally honest: the project is functional but still rough around the edges while it is being hardened.
