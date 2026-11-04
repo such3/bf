@@ -15,6 +15,7 @@
             <strong>such3</strong>
             <nav>
                 <a href="index.html" aria-current="page">Journey</a>
+                <a href="./web/stage-0.html">Stage 0</a>
                 <a href="./web/stage-1.html">Stage 1</a>
             </nav>
             <button id="theme">Theme</button>
@@ -37,6 +38,82 @@
             <div class="links">
                 <a class="btn pri" href="./web/stage-1.html">Read the full write-up</a>
                 <a class="btn" href="https://github.com/such3">GitHub</a>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Project progress</h2>
+            <div class="progress-box">
+                <div class="progress-meta">
+                    <strong>Current phase</strong>
+                    <span>Stage 0 / Stage 1</span>
+                </div>
+                <div class="progress-bar" aria-label="Project progress">
+                    <span style="width: 33%"></span>
+                </div>
+                <p>Two early stages are underway: the working interpreter exists, and the hardening pass is active.</p>
+            </div>
+
+            <div class="stage-grid">
+                <article class="stage-card done">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 0</span>
+                        <span class="stage-status">Done</span>
+                    </div>
+                    <h3>Interpreter foundation</h3>
+                    <p>Core execution loop, basic tape model, and initial project structure.</p>
+                    <a href="./web/stage-0.html">Open stage 0</a>
+                </article>
+
+                <article class="stage-card live">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 1</span>
+                        <span class="stage-status">Live</span>
+                    </div>
+                    <h3>Hardening the interpreter</h3>
+                    <p>Runtime guardrails, better validation, and debugging behavior.</p>
+                    <a href="./web/stage-1.html">Open stage 1</a>
+                </article>
+
+                <article class="stage-card todo">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 2</span>
+                        <span class="stage-status">Yet to do</span>
+                    </div>
+                    <h3>IR and compiler pipeline</h3>
+                    <p>Design the intermediate representation and pass boundaries.</p>
+                    <a href="./web/stage-2.html">Stage 2 draft</a>
+                </article>
+
+                <article class="stage-card todo">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 3</span>
+                        <span class="stage-status">Yet to do</span>
+                    </div>
+                    <h3>Optimization pass</h3>
+                    <p>Improve the IR with folding, simplification, and target-aware transforms.</p>
+                    <a href="./web/stage-3.html">Stage 3 draft</a>
+                </article>
+
+                <article class="stage-card todo">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 4</span>
+                        <span class="stage-status">Yet to do</span>
+                    </div>
+                    <h3>C backend</h3>
+                    <p>Lower the IR into C and validate the generated output path.</p>
+                    <a href="./web/stage-4.html">Stage 4 draft</a>
+                </article>
+
+                <article class="stage-card todo">
+                    <div class="stage-top">
+                        <span class="stage-number">Stage 5</span>
+                        <span class="stage-status">Yet to do</span>
+                    </div>
+                    <h3>LLVM backend</h3>
+                    <p>Move toward a more native pipeline with optimization and codegen depth.</p>
+                    <a href="./web/stage-5.html">Stage 5 draft</a>
+                </article>
             </div>
         </section>
 
