@@ -18,8 +18,7 @@
 #include <unordered_map>
 #include <string>
 #include <stack>
-#include <cstdlib>
-// TODO(CLEAN-5): add <cstdlib>; exit() currently arrives through another header.
+#include <cstdlib> // exit()
 using namespace std;
 
 // -----------------------------------------------------------------------------
@@ -52,10 +51,10 @@ using namespace std;
 //   cerr  errors
 //   clog  the trace, printed only with --verbose
 //   Redirect them separately:  ./bf prog.bf > out.txt 2> err.txt
-//   NOTE: clog and cerr both write to stderr, but cerr is tied to cout (cout is
-//   flushed before each cerr write) and clog is not. With the trace on clog,
-//   the program's own output can therefore appear after the trace in a
-//   terminal. See DEC-12.
+//   NOTE: clog and cerr both write to stderr, so a redirect of stderr captures
+//   both. cerr is tied to cout by default (cout is flushed before each cerr
+//   write); clog is not, so main ties it explicitly. Without that tie, the
+//   program's own output would appear after the trace in a terminal (DEC-12).
 //
 // Trace output
 //   With --verbose every instruction prints a state dump. Two casts keep it
@@ -68,14 +67,17 @@ using namespace std;
 //              characters by their integer value.
 //
 // Policy decisions
-//   DEC-1   '<' at cell 0 is currently ignored (open; see case '<')
+//   DEC-1   '<' at cell 0 is an error, like the right end (decided; see BUG-8)
 //   DEC-3   every failure exits with status 1 (decided for now)
 //   DEC-5   files with only whitespace or only comments are valid programs that
 //           do nothing; a 0-byte file is an error (decided for now)
-//   DEC-8   unknown flags and extra arguments are silently ignored (open)
+//   DEC-8   unknown flags and extra arguments: in progress (see T2-8)
 //   DEC-9   characters that are not commands are skipped as comments (decided)
 //   DEC-11  verbose is a global flag, not part of an options struct (decided
 //           for now)
+//   DEC-12  the trace uses clog, tied to cout (decided)
+//   DEC-13  the interpreter adds no output of its own, not even a final
+//           newline (decided)
 
 // -----------------------------------------------------------------------------
 // Machine state
@@ -84,9 +86,11 @@ using namespace std;
 // Set while parsing the command line. Every trace function checks it itself,
 // so callers cannot forget to.
 // TODO(DEC-11): revisit when more flags exist (an options struct, Stage 1).
-bool verboseOn = false;
+bool verbose_on = false;
 
 // Everything that changes while a program runs, plus the program text.
+// NOTE: the default member initializers start pc and data_ptr at 0 and the
+// tape at all zeros, so no separate initialization is needed.
 // TODO(DEC-7): the text moves out of the machine state in Stage 2 (the IR).
 struct MachineState
 {
@@ -103,33 +107,33 @@ struct MachineState
 // Trace (verbose only, on clog): the instruction about to run.
 void traceInstruction(char c)
 {
-    if (verboseOn)
+    if (verbose_on)
+    {
         clog << "Encountered " << c << endl;
+    }
 }
 
 // Trace (verbose only, on clog): pc, data_ptr, the current cell and the
-// character at pc. Called before the instruction runs, so it shows the state
-// that instruction sees.
+// character at pc (as a number). Called before the instruction runs, so it
+// shows the state that instruction sees.
 // NOTE: the verbose check is inside the function so no caller can forget it.
 // It costs one load and one well-predicted branch per call; measure it in
 // Stage 4 rather than guess.
-// TODO(REF-5): after the loop, pc == program.length(), so program[pc] is the
-//              string's terminating '\0' (legal for std::string, but not a
-//              program character). The final dump prints 0 for it.
-
 // NOTE (REF-5): after the loop pc == program.length(), so program[pc] is the
-// string's terminating '\0'. That is defined for std::string, so the final
-// dump prints 0 for "String Content", meaning "end of program".
+// string's terminating '\0'. That is defined for std::string, so the final dump
+// prints 0 for "program[pc]", meaning "end of program".
 // TODO(REF-5): must be fixed before Stage 2; reading at size() of a vector is
 //              undefined behavior.
 void dumpState(const MachineState &data)
 {
-    if (verboseOn)
-        clog << "Dump State : Tape ptr : " << data.data_ptr
-             << " String ptr : " << data.pc
-             << " Tape content : " << (int)data.tape[data.data_ptr]
-             << " String Content : " << (int)(unsigned char)data.program[data.pc]
+    if (verbose_on)
+    {
+        clog << "State: pc = " << data.pc
+             << ", data_ptr = " << data.data_ptr
+             << ", cell = " << (int)data.tape[data.data_ptr]
+             << ", program[pc] = " << (int)(unsigned char)data.program[data.pc]
              << endl;
+    }
 }
 
 // Checks that every bracket in `str` is matched and records each pair in `pos`
@@ -139,15 +143,17 @@ void dumpState(const MachineState &data)
 // An unmatched bracket prints an error on cerr and exits with status 1.
 // Example of an invalid program: ++++[*-***-*>**>]]   (the last ']' has no '[')
 //
-// TODO(CLEAN-3): take `const string &str`; it is only read.
-// TODO(CLEAN-4): compare with size_t instead of int in the loop.
-// TODO(CLEAN-2): include the index of the offending bracket in the messages and
-//                fix the spelling of "parentheses" in them.
+// NOTE: `str` is const because the function only reads it.
+// NOTE: indices in the messages count characters in the concatenated program
+// text, starting at 0 (line and column: T-11).
+// NOTE: the stack and both maps hold int indices, so assigning the size_t loop
+// index to them converts silently. That is safe for programs shorter than
+// 2^31 characters.
 // TODO(Q-9): decide whether a helper should be allowed to call exit().
-void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
+void matchBrackets(const string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
 {
     stack<int> stk;
-    for (int i = 0; i < str.size(); i++)
+    for (size_t i = 0; i < str.size(); i++)
     {
         if (str[i] == '[')
         {
@@ -169,20 +175,17 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
 
             // A ']' with no open '['. Exit status 0 means success, so a
             // failure must exit nonzero.
-            cerr << "[ERROR] Program must have balanced paranthesis . (Missing '[' )\n";
+            cerr << "[ERROR] Unmatched ']' at index " << i << ": there is no '[' to match it.\n";
             exit(1);
-            // TODO(CLEAN-12): unreachable after exit(); remove.
-            return;
         }
     }
 
-    // Anything left on the stack is a '[' that was never closed.
+    // Anything left on the stack is a '[' that was never closed. The top of the
+    // stack is the innermost one.
     if (!stk.empty())
     {
-        cerr << "[ERROR] Program must have balanced paranthesis . (Missing ']' ) \n";
+        cerr << "[ERROR] Unmatched '[' at index " << stk.top() << ": it is never closed.\n";
         exit(1);
-        // TODO(CLEAN-12): unreachable after exit(); remove.
-        return;
     }
 }
 
@@ -199,7 +202,10 @@ void matchBrackets(string &str, unordered_map<int, int> &pos, unordered_map<int,
 //   argv[0] = "./bf", argv[1] = "prog.bf", argv[2] = "--verbose"
 int main(int argc, char *argv[])
 {
-    // pc, data_ptr and tape start at their default values (0, 0, all zeros).
+    // Tie clog to cout so the program's pending output is flushed before every
+    // trace write; the two streams then appear in the order things happened.
+    clog.tie(&cout);
+
     MachineState machine;
 
     // ---- 1. Command line ----
@@ -214,46 +220,46 @@ int main(int argc, char *argv[])
 
     // Scan for flags. The loop starts at 2 because argv[0] is the program name
     // and argv[1] is the path. Flags are parsed before any code that prints
-    // trace output, because those prints depend on verboseOn.
+    // trace output, because those prints depend on verbose_on.
     // NOTE: argv[i] is a char*, and == on two char* compares addresses, not
     // text. The std::string copy makes the comparison compare the characters.
-    // TODO(DEC-8): unknown flags and extra arguments are silently ignored.
-    // TODO(T2-6): this dump runs before the flag check in the same iteration,
-    //             so it only prints arguments that come after --verbose (never
-    //             the flag itself), and it writes to cout, which is the
-    //             program's own output. Print all arguments once, after the
-    //             loop, on clog.
+    // TODO(T2-8): the first clog line below is not guarded by verbose_on, so it
+    //             prints once per extra argument even without --verbose. The
+    //             else branch prints help for every argument that is not
+    //             --verbose, but the program carries on and exits 0 (DEC-8).
     for (int i = 2; i < argc; i++)
     {
-        // cout << "DEBUG - verbose flag is accessible here " << verboseOn << endl;
-        
         string verbose = "--verbose";
-        string arguement = argv[i];
+        string argument = argv[i];
 
-        clog << "This dump starts after the file name !! So only the flags will be printed  (from index 2 )" << endl;
-        if (arguement == verbose)
+        if (argument == verbose)
         {
-            verboseOn = true;
+            verbose_on = true;
             clog << "\n Verbose is turned on !!" << endl;
         }
+        else
+        {
+            cerr << " Help   " << endl;
+            // the below line is just an explanation of the code , nothing else , so it for someone reviews the code 
+            // clog << "This dump starts after the file name !! So only the flags will be printed  (from index 2 )" << endl;
+            cerr << "Use --verbose for verbose mode . " << endl;
+        }
 
-        // moved this down here , because just above this step , we set the verbose flag , so earlier verbose was not at all set 
-        if (verboseOn){
-
-            clog << "Arguement " << i << " : " << argv[i] << endl;
+        // The flag was just processed above, so verbose_on is already up to
+        // date for this argument.
+        if (verbose_on)
+        {
+            clog << "Argument " << i << " : " << argv[i] << endl;
         }
     }
 
     // Trace: startup information (verbose only).
-    if (verboseOn)
-        clog << " \n Number of  cmd line args : " << argc << endl;
-
-    // TODO(CLEAN-7): this is an interpreter, not a compiler.
-    if (verboseOn)
-        clog << "This is a brainfuck compiler!" << endl;
-
-    if (verboseOn)
-        clog << "This is verbose flag : " << verboseOn << endl;
+    if (verbose_on)
+    {
+        clog << "\n Number of cmd line args : " << argc << endl;
+        clog << "This is a Brainfuck interpreter!" << endl;
+        clog << "This is verbose flag : " << verbose_on << endl;
+    }
 
     // ---- Working variables ----
 
@@ -261,23 +267,15 @@ int main(int argc, char *argv[])
     unordered_map<int, int> positions;
     unordered_map<int, int> revpos;
 
-    // The struct's default member initializers already set both to 0, so these
-    // two assignments repeat that.
-    // TODO(Q-13): decide whether they should stay.
-    machine.data_ptr = 0;
-    machine.pc = 0;
-
     // The line just read. The whole program accumulates in machine.program.
-    string rdLine;
+    string rd_line;
 
     string input_file_name;
 
     // ---- 2. Read the program ----
 
     // argv[1] is the path of the Brainfuck program (argc >= 2 was checked above).
-    // TODO(T2-5): the error messages below do not say which path failed, and
-    //             the "Number of cmd line args" trace is the only place the
-    //             path is ever shown.
+    // TODO(T2-5): the error messages below do not say which path failed.
     input_file_name = argv[1];
 
     ifstream file(input_file_name);
@@ -286,6 +284,7 @@ int main(int argc, char *argv[])
     if (!file.is_open())
     {
         cerr << "\n[ERROR] Error in opening file !! or File does not exist !! \n";
+        cerr << "\n[USAGE] the command should be something like this  : ./run <input-file>.txt --verbose (optional) \n";
         exit(1);
     }
 
@@ -299,19 +298,23 @@ int main(int argc, char *argv[])
     }
 
     // Read line by line and concatenate.
-    // NOTE: rdLine is separate from machine.program because the final, failing
+    // NOTE: rd_line is separate from machine.program because the final, failing
     // getline call clears the string it reads into; reading straight into
     // machine.program would leave it empty.
     // NOTE: concatenating loses line and column information (DEC-6, T-11).
-    while (getline(file, rdLine))
+    while (getline(file, rd_line))
     {
-        if (verboseOn)
-            clog << " The text in the file : " << rdLine << endl;
+        if (verbose_on)
+        {
+            clog << " The text in the file : " << rd_line << endl;
+        }
 
-        machine.program.append(rdLine);
+        machine.program.append(rd_line);
 
-        if (verboseOn)
+        if (verbose_on)
+        {
             clog << "[APPEND LOGS] After appending , we have this content : " << machine.program << endl;
+        }
     }
 
     // The program is in memory, so the file is no longer needed.
@@ -323,7 +326,7 @@ int main(int argc, char *argv[])
     matchBrackets(machine.program, positions, revpos);
 
     // Trace: the jump tables (verbose only).
-    if (verboseOn)
+    if (verbose_on)
     {
         clog << "Contents of Forward Map " << endl;
         for (const auto &pair : positions)
@@ -340,8 +343,10 @@ int main(int argc, char *argv[])
 
     // ---- 4. Execute ----
 
-    if (verboseOn)
-        clog << "We will process the bf pl here " << endl;
+    if (verbose_on)
+    {
+        clog << "Executing the program" << endl;
+    }
 
     // Rule for every case below: pc must advance or jump, otherwise the same
     // instruction repeats forever. data_ptr changes only on '>' and '<'.
@@ -350,9 +355,11 @@ int main(int argc, char *argv[])
     // Iteration counter, used only by the trace (it only advances with --verbose).
     int cnt = 0;
 
-    // TODO(CLEAN-4): int vs size_t comparison.
+    // NOTE: pc is an int that never goes below 0 (it starts at 0 and only
+    // advances or jumps forward to a matching bracket), so the cast to size_t
+    // is safe and compares the two values as unsigned numbers.
     // TODO(T-4): add a step limit so a runaway loop cannot hang the program.
-    while (machine.pc < machine.program.length())
+    while (static_cast<size_t>(machine.pc) < machine.program.length())
     {
         // Stop when the tape pointer has run off the right end. Checked at the
         // top of the iteration, before any cell is accessed. Reports on cerr
@@ -364,7 +371,7 @@ int main(int argc, char *argv[])
         }
 
         // Trace: iteration header (verbose only).
-        if (verboseOn)
+        if (verbose_on)
         {
             clog << "------------------------------------------------" << endl;
             clog << "Iteration : " << cnt++ << endl;
@@ -408,11 +415,12 @@ int main(int argc, char *argv[])
             break;
 
         case '<':
-            // Move the data pointer left.
-            // TODO(DEC-1): at cell 0 the move is silently ignored and the
-            //              program carries on with the wrong cell. Decide
-            //              whether this should stop with an error instead, to
-            //              match the right end.
+            // Move the data pointer left. At cell 0 there is no cell to move
+            // to, so the program stops with an error, like the right end (DEC-1).
+            // TODO(BUG-8): the branch below calls exit(0), which reports
+            //              success. Failures exit with status 1 (DEC-3).
+            // TODO(CLEAN-13): the message names an internal variable; word it
+            //                 for the user and say where it happened.
 
             traceInstruction(machine.program[machine.pc]);
 
@@ -420,19 +428,9 @@ int main(int argc, char *argv[])
 
             if (machine.data_ptr == 0)
             {
-
+                cerr << "[ERROR] Access out of tape bounds " << endl;
                 cerr << "[ERROR] trying to move data_ptr before 0 " << endl;
-                exit(0);
-                // TODO(CLEAN-13): this message names an internal variable; word
-                //                 it for the user instead.
-
-                // commenting out this as of now for fixing this 
-
-                // if (verboseOn)
-                //     clog << "[DEBUG] Not moving data_ptr , or else data_ptr will go in negative " << endl;
-                // // NOTE: pc must advance even though data_ptr does not move.
-                // machine.pc++;
-                // break;
+                exit(1);
             }
             machine.data_ptr--;
             machine.pc++;
@@ -442,8 +440,8 @@ int main(int argc, char *argv[])
         case '.':
             // Output the current cell as one raw byte on stdout: no label and
             // no newline. The trace goes to clog.
-            // NOTE: cout is not flushed here; it is flushed at exit (or when
-            // its buffer fills). See "Output streams" for the ordering effect.
+            // NOTE: cout is not flushed here; it is flushed at exit, when its
+            // buffer fills, or before a clog write (the tie in main).
 
             traceInstruction(machine.program[machine.pc]);
             dumpState(machine);
@@ -475,7 +473,6 @@ int main(int argc, char *argv[])
 
             if (machine.tape[machine.data_ptr] == 0)
             {
-
                 dumpState(machine);
 
                 machine.pc = positions[machine.pc] + 1;
@@ -494,10 +491,10 @@ int main(int argc, char *argv[])
             // Zero cell: leave the loop.
             // NOTE: the jump target is read from revpos and 1 is added to the
             // value; the stored entry is not modified.
+
             traceInstruction(machine.program[machine.pc]);
             if (machine.tape[machine.data_ptr] != 0)
             {
-
                 dumpState(machine);
 
                 machine.pc = revpos[machine.pc] + 1;
@@ -517,17 +514,16 @@ int main(int argc, char *argv[])
             //             non-command characters in a validation pass before
             //             execution starts.
 
-            if (verboseOn)
+            dumpState(machine);
+            if (verbose_on)
             {
-
-                dumpState(machine);
                 clog << " Skipping other instructions such as new lines and spaces and tabs " << endl;
             }
 
             machine.pc++;
         }
         // Trace: iteration footer (verbose only).
-        if (verboseOn)
+        if (verbose_on)
         {
             clog << "------------------------------------------------" << endl;
         }
@@ -535,23 +531,16 @@ int main(int argc, char *argv[])
 
     // Trace: the state after the last instruction. The per-instruction dump
     // runs before each instruction, so the effect of the last one is only
-    // visible here.
-    // TODO(REF-5): this dump reads one past the end of the program text (see
-    //              dumpState).
-    if (verboseOn)
+    // visible here. "program[pc]" prints 0 here (end of program); see the NOTE
+    // above dumpState.
+    if (verbose_on)
     {
         clog << "\n Final Dump state " << endl;
         dumpState(machine);
     }
 
-    // Prints one newline on stdout after the program finishes.
-    // NOTE: this is a byte the Brainfuck program did not output, so every run
-    // writes at least "\n", even a program that prints nothing. It is not
-    // written when the program exits through an error.
-    // TODO(T2-7): decide whether the interpreter should add it.
-    
-    // as of now  let us keep this commented 
-    // as I have seen even in normal compiler , it is the job of the user to get the newline , not the job of the compiler 
-    // cout << endl;
+    // NOTE (DEC-13): the interpreter adds no output of its own, not even a final
+    // newline. The Brainfuck program owns every byte it writes; a program that
+    // wants a newline prints the value 10.
     return 0;
 }
