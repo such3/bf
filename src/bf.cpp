@@ -88,6 +88,10 @@ using namespace std;
 // TODO(DEC-11): revisit when more flags exist (an options struct, Stage 1).
 bool verbose_on = false;
 
+// we will keep count of  some steps , so that we dont run on a infinite loop
+const unsigned long long MAX_STEPS = 10000000; // 10 million
+
+
 // Everything that changes while a program runs, plus the program text.
 // NOTE: the default member initializers start pc and data_ptr at 0 and the
 // tape at all zeros, so no separate initialization is needed.
@@ -302,8 +306,12 @@ int main(int argc, char *argv[])
     // getline call clears the string it reads into; reading straight into
     // machine.program would leave it empty.
     // NOTE: concatenating loses line and column information (DEC-6, T-11).
+
+
+
     while (getline(file, rd_line))
     {
+       
         if (verbose_on)
         {
             clog << " The text in the file : " << rd_line << endl;
@@ -359,8 +367,23 @@ int main(int argc, char *argv[])
     // advances or jumps forward to a matching bracket), so the cast to size_t
     // is safe and compares the two values as unsigned numbers.
     // TODO(T-4): add a step limit so a runaway loop cannot hang the program.
+
+    // this is something to check for the infinite loop
+    unsigned long long steps = 0;
     while (static_cast<size_t>(machine.pc) < machine.program.length())
     {
+
+        // This is used to check infinite loops and to see how many steps the program is running.
+         if(verbose_on){
+            clog << "Step Count : " << steps << endl;
+        }
+        if(steps >= MAX_STEPS){
+            cerr << "[ERROR] Step limit of " << MAX_STEPS << " reached at index  " << machine.pc << "\n";
+            exit(1);
+        }
+        steps++;
+
+        
         // Stop when the tape pointer has run off the right end. Checked at the
         // top of the iteration, before any cell is accessed. Reports on cerr
         // and exits with status 1.
