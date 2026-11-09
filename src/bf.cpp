@@ -451,8 +451,7 @@ int main(int argc, char *argv[])
 
             if (machine.data_ptr == 0)
             {
-                cerr << "[ERROR] Access out of tape bounds " << endl;
-                cerr << "[ERROR] trying to move data_ptr before 0 " << endl;
+                cerr << "[ERROR] Access out of tape bounds  trying to access negative  bounds   " << endl;
                 exit(1);
             }
             machine.data_ptr--;
