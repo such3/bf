@@ -1,14 +1,46 @@
-# Makefile (project root)
-CXX      = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined
+# Compiler
+CXX = g++
 
-bf: src/bf.cpp
-	$(CXX) $(CXXFLAGS) $< -o $@
+# Compiler flags
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined -Isrc
 
-test: bf
-	./tests/run_tests.sh ./bf
+# Source files
+SRC = src/bf.cpp \
+      src/loader/loader.cpp \
+      src/cli/cli.cpp
 
+# Executable
+TARGET = bf
+
+# Default input file
+INPUT = src/input.bf
+
+# Verbose mode (default: disabled)
+VERBOSE ?= 0
+
+ifeq ($(VERBOSE),1)
+    FLAGS = -v
+else
+    FLAGS =
+endif
+
+# Default target
+all: $(TARGET)
+
+# Compile
+$(TARGET): $(SRC)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
+
+# Manual execution
+run: $(TARGET)
+	./$(TARGET)  $(INPUT) $(FLAGS)
+
+# Automated tests
+test: $(TARGET)
+	./tests/run_tests.sh ./$(TARGET)
+
+# Clean
 clean:
-	rm -f bf
+	rm -f $(TARGET)
 
-.PHONY: test clean
+.PHONY: all run test clean
