@@ -24,6 +24,7 @@
 #include "cli/cli.h"
 #include "loader/loader.h"
 #include "machine/machine.h"
+#include "parser/parser.h"
 using namespace std;
 
 // -----------------------------------------------------------------------------
@@ -152,44 +153,6 @@ void dumpState(const MachineState &data)
 // index to them converts silently. That is safe for programs shorter than
 // 2^31 characters.
 // TODO(Q-9): decide whether a helper should be allowed to call exit().
-void matchBrackets(const string &str, unordered_map<int, int> &pos, unordered_map<int, int> &rpos)
-{
-    stack<int> stk;
-    for (size_t i = 0; i < str.size(); i++)
-    {
-        if (str[i] == '[')
-        {
-            stk.push(i);
-            // NOTE: no `continue` is needed here. The next `if` tests for ']',
-            // which is false for a '[', so nothing else happens this iteration.
-        }
-        if (str[i] == ']')
-        {
-            if (!stk.empty())
-            {
-                pos[stk.top()] = i;
-                rpos[i] = stk.top();
-                stk.pop();
-                // NOTE: required. Without it, a matched ']' would fall through
-                // to the unmatched-']' error below.
-                continue;
-            }
-
-            // A ']' with no open '['. Exit status 0 means success, so a
-            // failure must exit nonzero.
-            cerr << "[ERROR] Unmatched ']' at index " << i << ": there is no '[' to match it.\n";
-            exit(1);
-        }
-    }
-
-    // Anything left on the stack is a '[' that was never closed. The top of the
-    // stack is the innermost one.
-    if (!stk.empty())
-    {
-        cerr << "[ERROR] Unmatched '[' at index " << stk.top() << ": it is never closed.\n";
-        exit(1);
-    }
-}
 
 // -----------------------------------------------------------------------------
 // main
@@ -338,23 +301,26 @@ int main(int argc, char *argv[])
 
         // ---- 3. Validate brackets and build the jump tables ----
 
-        matchBrackets(machine.program, positions, revpos);
+        // matchBrackets(machine.program, positions, revpos);
 
+        validateBrackets(machine,positions,revpos);
         // Trace: the jump tables (verbose only).
-        if (options.verbose)
-        {
-            clog << "Contents of Forward Map " << endl;
-            for (const auto &pair : positions)
-            {
-                clog << pair.first << ": " << pair.second << "\n";
-            }
+        printMapTrace(options,positions,revpos);
 
-            clog << "Contents of Backward Map " << endl;
-            for (const auto &pair : revpos)
-            {
-                clog << pair.first << ": " << pair.second << "\n";
-            }
-        }
+        // if (options.verbose)
+        // {
+        //     clog << "Contents of Forward Map " << endl;
+        //     for (const auto &pair : positions)
+        //     {
+        //         clog << pair.first << ": " << pair.second << "\n";
+        //     }
+
+        //     clog << "Contents of Backward Map " << endl;
+        //     for (const auto &pair : revpos)
+        //     {
+        //         clog << pair.first << ": " << pair.second << "\n";
+        //     }
+        // }
 
         // ---- 4. Execute ----
 
@@ -571,6 +537,10 @@ int main(int argc, char *argv[])
     }
     catch(const InputSourceException &e ){
         cerr << "Input Source Error : " << e.what() << " \n";
+        exit(1);
+    }
+    catch(const InvalidBracketsException &e){
+        cerr << "Invalid Bracket Error : " << e.what() << " \n";
         exit(1);
     }
     catch (const std::exception &e)
