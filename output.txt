@@ -1,1 +1,2 @@
+./bf  src/input.bf  --max-steps 10000000
 A

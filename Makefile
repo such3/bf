@@ -8,7 +8,11 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -g -fsanitize=address,undefined -Isrc
 SRC = src/bf.cpp \
       src/loader/loader.cpp \
       src/cli/cli.cpp \
-	  src/parser/parser.cpp
+	  src/parser/parser.cpp \
+	  src/tracers/tracers.cpp \
+	  src/exceptions/exceptions.cpp \
+	  src/engine/engine.cpp
+
 
 # Executable
 TARGET = bf
