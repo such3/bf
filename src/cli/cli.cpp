@@ -28,10 +28,18 @@ Options parseArgs(int argc, char* argv[]) {
             }
 
             std::string value = argv[++i];
+
+            // Reject negative values before unsigned conversion.
+            if (!value.empty() && value[0] == '-') {
+                throw CommandLineArgumentException(
+                    "--max-steps cannot be negative"
+                );
+            }
+
             size_t pos = 0;
 
             try {
-                options.maxSteps = std::stoll(value, &pos);
+                options.maxSteps = std::stoull(value, &pos);
 
                 if (pos != value.length()) {
                     throw CommandLineArgumentException(
@@ -47,12 +55,6 @@ Options parseArgs(int argc, char* argv[]) {
             catch (const std::out_of_range&) {
                 throw CommandLineArgumentException(
                     "--max-steps value is out of range"
-                );
-            }
-
-            if (options.maxSteps < 0) {
-                throw CommandLineArgumentException(
-                    "--max-steps cannot be negative"
                 );
             }
         }
