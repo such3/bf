@@ -92,10 +92,12 @@ using namespace std;
 // Set while parsing the command line. Every trace function checks it itself,
 // so callers cannot forget to.
 // TODO(DEC-11): revisit when more flags exist (an options struct, Stage 1).
-bool verbose_on = false;
+// this is redundant 
+// bool verbose_on = false;
 
 // we will keep count of  some steps , so that we dont run on a infinite loop
-const unsigned long long MAX_STEPS = 10000000; // 10 million
+// use the user max space
+ // 10 million
 
 // Everything that changes while a program runs, plus the program text.
 // NOTE: the default member initializers start pc and data_ptr at 0 and the
@@ -108,9 +110,9 @@ const unsigned long long MAX_STEPS = 10000000; // 10 million
 // -----------------------------------------------------------------------------
 
 // Trace (verbose only, on clog): the instruction about to run.
-void traceInstruction(char c)
+void traceInstruction(char c,Options &options)
 {
-    if (verbose_on)
+    if (options.verbose)
     {
         clog << "Encountered " << c << endl;
     }
@@ -127,9 +129,9 @@ void traceInstruction(char c)
 // prints 0 for "program[pc]", meaning "end of program".
 // TODO(REF-5): must be fixed before Stage 2; reading at size() of a vector is
 //              undefined behavior.
-void dumpState(const MachineState &data)
+void dumpState(const MachineState &data, Options &options)
 {
-    if (verbose_on)
+    if (options.verbose)
     {
         clog << "State: pc = " << data.pc
              << ", data_ptr = " << data.data_ptr
@@ -351,9 +353,9 @@ int main(int argc, char *argv[])
             {
                 clog << "Step Count : " << steps << endl;
             }
-            if (steps >= MAX_STEPS)
+            if (steps >= options.maxSteps)
             {
-                cerr << "[ERROR] Step limit of " << MAX_STEPS << " reached at index  " << machine.pc << "\n";
+                cerr << "[ERROR] Step limit of " << options.maxSteps << " reached at index  " << machine.pc << "\n";
                 exit(1);
             }
             steps++;
@@ -380,8 +382,8 @@ int main(int argc, char *argv[])
             case '+':
                 // Increment the current cell (255 wraps to 0).
 
-                traceInstruction(machine.program[machine.pc]);
-                dumpState(machine);
+                traceInstruction(machine.program[machine.pc],options);
+                dumpState(machine,options);
 
                 machine.tape[machine.data_ptr]++;
                 machine.pc++;
@@ -391,8 +393,8 @@ int main(int argc, char *argv[])
             case '-':
                 // Decrement the current cell (0 wraps to 255).
 
-                traceInstruction(machine.program[machine.pc]);
-                dumpState(machine);
+                traceInstruction(machine.program[machine.pc],options);
+                dumpState(machine,options);
 
                 machine.tape[machine.data_ptr]--;
                 machine.pc++;
@@ -403,8 +405,8 @@ int main(int argc, char *argv[])
                 // Move the data pointer right. Running past the last cell is
                 // caught at the top of the next iteration.
 
-                traceInstruction(machine.program[machine.pc]);
-                dumpState(machine);
+                traceInstruction(machine.program[machine.pc],options);
+                dumpState(machine,options);
 
                 machine.data_ptr++;
                 machine.pc++;
@@ -419,9 +421,9 @@ int main(int argc, char *argv[])
                 // TODO(CLEAN-13): the message names an internal variable; word it
                 //                 for the user and say where it happened.
 
-                traceInstruction(machine.program[machine.pc]);
+                traceInstruction(machine.program[machine.pc],options);
 
-                dumpState(machine);
+                dumpState(machine,options);
 
                 if (machine.data_ptr == 0)
                 {
@@ -439,8 +441,8 @@ int main(int argc, char *argv[])
                 // NOTE: cout is not flushed here; it is flushed at exit, when its
                 // buffer fills, or before a clog write (the tie in main).
 
-                traceInstruction(machine.program[machine.pc]);
-                dumpState(machine);
+                traceInstruction(machine.program[machine.pc],options);
+                dumpState(machine,options);
 
                 cout << machine.tape[machine.data_ptr];
 
@@ -452,8 +454,8 @@ int main(int argc, char *argv[])
                 // Read one character into the current cell.
                 // TODO(T-10): not implemented; the instruction is skipped.
 
-                traceInstruction(machine.program[machine.pc]);
-                dumpState(machine);
+                traceInstruction(machine.program[machine.pc],options);
+                dumpState(machine,options);
 
                 machine.pc++;
 
@@ -465,17 +467,17 @@ int main(int argc, char *argv[])
                 // NOTE: the lookup key is pc (position in the program text),
                 // not data_ptr (position on the tape).
 
-                traceInstruction(machine.program[machine.pc]);
+                traceInstruction(machine.program[machine.pc],options);
 
                 if (machine.tape[machine.data_ptr] == 0)
                 {
-                    dumpState(machine);
+                    dumpState(machine,options);
 
                     machine.pc = positions[machine.pc] + 1;
                 }
                 else
                 {
-                    dumpState(machine);
+                    dumpState(machine,options);
 
                     machine.pc++;
                 }
@@ -488,16 +490,16 @@ int main(int argc, char *argv[])
                 // NOTE: the jump target is read from revpos and 1 is added to the
                 // value; the stored entry is not modified.
 
-                traceInstruction(machine.program[machine.pc]);
+                traceInstruction(machine.program[machine.pc],options);
                 if (machine.tape[machine.data_ptr] != 0)
                 {
-                    dumpState(machine);
+                    dumpState(machine,options);
 
                     machine.pc = revpos[machine.pc] + 1;
                 }
                 else
                 {
-                    dumpState(machine);
+                    dumpState(machine,options);
 
                     machine.pc++;
                 }
@@ -510,7 +512,7 @@ int main(int argc, char *argv[])
                 //             non-command characters in a validation pass before
                 //             execution starts.
 
-                dumpState(machine);
+                dumpState(machine,options);
                 if (options.verbose)
                 {
                     clog << " Skipping other instructions such as new lines and spaces and tabs " << endl;
@@ -532,8 +534,13 @@ int main(int argc, char *argv[])
         if (options.verbose)
         {
             clog << "\n Final Dump state " << endl;
-            dumpState(machine);
+            dumpState(machine,options);
         }
+    }
+    catch (const CommandLineArgumentException& e) {
+        std::cerr << "CLI Error: " << e.what() << '\n';
+        std::cerr << "Usage: ./bf <input-file> [--verbose|-v] [--max-steps N]\n";
+        return 1;
     }
     catch(const InputSourceException &e ){
         cerr << "Input Source Error : " << e.what() << " \n";

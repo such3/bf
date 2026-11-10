@@ -18,6 +18,8 @@ INPUT = src/input.bf
 
 # Verbose mode (default: disabled)
 VERBOSE ?= 0
+MAX_STEPS ?= 10000000
+
 
 ifeq ($(VERBOSE),1)
     FLAGS = -v
@@ -34,7 +36,7 @@ $(TARGET): $(SRC)
 
 # Manual execution
 run: $(TARGET)
-	./$(TARGET)  $(INPUT) $(FLAGS)
+	./$(TARGET)  $(INPUT) $(FLAGS) --max-steps $(MAX_STEPS)
 
 # Automated tests
 test: $(TARGET)

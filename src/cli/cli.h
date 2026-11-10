@@ -1,21 +1,20 @@
-#pragma once 
-
+#pragma once
 
 #include <string>
-#include <vector>
+#include <stdexcept>
+#include "./../machine/machine.h"
 
 
 struct Options {
-    // major  thins we will have here 
-    // file name which contains the input 
-    // verbose if on or off
-    // max steps will take 2 arguements 
-    // some additions 
     std::string inputFile;
     bool verbose = false;
-
+    long long unsigned maxSteps = MAX_STEPS;
 };
 
+class CommandLineArgumentException : public std::runtime_error {
+public:
+    explicit CommandLineArgumentException(const std::string& message)
+        : std::runtime_error(message) {}
+};
 
-// here we just define the function 
-Options parseArgs(int argc , char * argv[]);
+Options parseArgs(int argc, char* argv[]);

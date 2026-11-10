@@ -2,6 +2,9 @@
 
 #include <string>
 
+const unsigned long long MAX_STEPS = 10000000;
+
+
 struct MachineState
 {
     int pc = 0;       // next instruction, an index into `program`

@@ -1,37 +1,75 @@
 #include "cli.h"
-
 #include <iostream>
-#include  <stdexcept>
+#include <string>
+#include <stdexcept>
 
-Options parseArgs(int argc , char* argv[]){
+Options parseArgs(int argc, char* argv[]) {
     Options options;
 
-    if(argc < 2){
-        throw std::runtime_error("Missing input File");
+    if (argc < 2) {
+        throw CommandLineArgumentException("Missing input file");
     }
 
-    // Decision , as of now the 1st arguement will be the input file 
+    // First argument is the input file.
     options.inputFile = argv[1];
 
-    for (int i = 2; i < argc;i++){
+    for (int i = 2; i < argc; i++) {
         std::string arg = argv[i];
 
-        if(arg == "--verbose" || arg == "-v"){
+        if (arg == "--verbose" || arg == "-v") {
             options.verbose = true;
-            std::clog << "This is a Brainfuck interpreter! \n";
-            std::clog << "Verbose mode enabled \n";
-            std::clog << "\nNumber of cmd line args : " << argc << std::endl;
-        }else {
-                // cerr << " Help   " << endl;
-                // the below line is just an explanation of the code , nothing else , so it for someone reviews the code
-                // clog << "This dump starts after the file name !! So only the flags will be printed  (from index 2 )" << endl;
-                std::cerr << "[USAGE] --verbose or -v for verbose mode . " << std::endl;
         }
-        if (options.verbose)
-            {
-                std::clog << "Argument " << i << " : " << argv[i] << std::endl;
-            }
-    }
-    return options;
 
+        else if (arg == "--max-steps") {
+            if (i + 1 >= argc) {
+                throw CommandLineArgumentException(
+                    "--max-steps requires a value"
+                );
+            }
+
+            std::string value = argv[++i];
+            size_t pos = 0;
+
+            try {
+                options.maxSteps = std::stoll(value, &pos);
+
+                if (pos != value.length()) {
+                    throw CommandLineArgumentException(
+                        "Invalid value for --max-steps: " + value
+                    );
+                }
+            }
+            catch (const std::invalid_argument&) {
+                throw CommandLineArgumentException(
+                    "Invalid number for --max-steps: " + value
+                );
+            }
+            catch (const std::out_of_range&) {
+                throw CommandLineArgumentException(
+                    "--max-steps value is out of range"
+                );
+            }
+
+            if (options.maxSteps < 0) {
+                throw CommandLineArgumentException(
+                    "--max-steps cannot be negative"
+                );
+            }
+        }
+
+        else {
+            throw CommandLineArgumentException(
+                "Unknown argument: " + arg
+            );
+        }
+    }
+
+    if (options.verbose) {
+        std::clog << "Brainfuck interpreter\n";
+        std::clog << "Verbose mode enabled\n";
+        std::clog << "Input file: " << options.inputFile << '\n';
+        std::clog << "Max steps: " << options.maxSteps << '\n';
+    }
+
+    return options;
 }
